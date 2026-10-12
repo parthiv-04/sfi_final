@@ -22,7 +22,7 @@ it('uses the same schedule seed per room and round and caps crop loss',()=>{
   const before=m.game!.players[0].harvest
   const result=act(m,'u0','pest',{destroyed:C.minigame.plants})
   expect(result.receipt.accepted).toBe(true); m=result.model
-  expect(m.game!.players[0].harvest).toBe(before-C.pestMaxLoss)
+  expect(m.game!.players[0].harvest).toBe(Math.max(0,before-C.pestMaxLoss))
   expect(act(m,'u0','pest',{destroyed:0}).receipt.accepted).toBe(false)
   expect(act(m,'u1','pest',{destroyed:99}).receipt.accepted).toBe(false)
   expect(projectRoom(m).publicRoom.pestSeed).toBe(projectRoom(m).publicRoom.pestSeed)

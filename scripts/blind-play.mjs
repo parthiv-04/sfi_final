@@ -1,4 +1,5 @@
 // Card-based balance report, driving the real pure engine without changing config.
+import { coordinate } from './strategies.mjs'
 import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'vite'
@@ -17,6 +18,7 @@ try {
     const assignments = Object.fromEntries(state.players.map((p, i) => [p.id, seats[(i + seed - 1) % n]]))
     while (!['gameOver', 'debrief'].includes(state.phase)) {
       state = E.advanceCouncil(state)
+      const coordinated = table === 'coordinated' ? coordinate(E,C,state) : null
       for (const p of state.players) {
         const cooperative = assignments[p.id] === 'cooperative'
         const kind = E.currentEvent(state).kind
@@ -24,17 +26,20 @@ try {
         let promise = cooperative || assignments[p.id] === 'sellPromise' || assignments[p.id] === 'sharePromise'
         if (assignments[p.id] === 'sharePromise') card = 'share'
         if (['random', 'neverPromise'].includes(assignments[p.id])) {
-          const choices = ['sell', 'share', 'store', ...(E.warehouseUnits(state, p.id) > 0 ? ['release'] : [])]
+          const choices = E.allowedCards(state,p)
           card = choices[Math.floor(taps() * choices.length)]
           promise = assignments[p.id] !== 'neverPromise' && taps() < 0.5
         }
+        if(coordinated) ({card,promise}=coordinated[p.id])
+        if(!E.allowedCards(state,p).includes(card)) card='sell'
+        if(p.role === 'contract') promise=false
         state = E.updateDecision(state, p.id, { card, promise: promise && state.round < C.rounds })
       }
       state = E.finishDecisions(state)
       assert.ok(state.council.budget >= 0)
       for (const line of state.resolution.lines) {
         assert.ok(line.transportUsed <= line.transportCapacity + 0.001)
-        assert.equal(q(line.harvest), q(line.contractUnits + line.marketUnits + line.hubUnits - line.warehouseReleased - line.reserveReleased + line.stored + line.spoilage))
+        assert.equal(q(line.harvest), q(line.contractUnits + line.marketUnits + line.hubUnits - line.warehouseReleased - line.reserveReleased + line.stored + line.spoilage + line.companyUnits - line.companyRotten))
       }
       if (state.phase === 'gameOver') break
       state = E.advanceRound(state)
@@ -49,11 +54,11 @@ try {
     assert.deepEqual(batch[0], play(n, seeds[0], table))
     games.push(...batch)
     const farmers = batch.flatMap((game) => game.farmers)
-    rows.push({ farmers: n, table, games: seeds.length, cityLosses: batch.filter((g) => g.lost).length, lossPercent: q(batch.filter((g) => g.lost).length / seeds.length * C.quantityPrecision), averageCash: mean(farmers.map((p) => p.cash)), selfishCash: farmers.some((p) => p.strategy === 'selfish') ? mean(farmers.filter((p) => p.strategy === 'selfish').map((p) => p.cash)) : null, cooperativeCash: farmers.some((p) => p.strategy === 'cooperative') ? mean(farmers.filter((p) => p.strategy === 'cooperative').map((p) => p.cash)) : null, winners: batch.reduce((s, g) => s + g.goalCount, 0), farmerRuns: n * seeds.length, averageGoalWinners: mean(batch.map((g) => g.goalCount)), averageWaste: mean(batch.map((g) => g.waste)), averageFinalSecurity: mean(batch.map((g) => g.security)) })
+    rows.push({ farmers: n, table, games: seeds.length, cityLosses: batch.filter((g) => g.lost).length, lossPercent: q(batch.filter((g) => g.lost).length / seeds.length * C.quantityPrecision), averageCash: mean(farmers.map((p) => p.cash)), selfishCash: farmers.some((p) => p.strategy === 'selfish') ? mean(farmers.filter((p) => p.strategy === 'selfish').map((p) => p.cash)) : null, cooperativeCash: farmers.some((p) => p.strategy === 'cooperative') ? mean(farmers.filter((p) => p.strategy === 'cooperative').map((p) => p.cash)) : null, winners: batch.reduce((s, g) => s + g.goalCount, 0), farmerRuns: n * seeds.length, averageGoalWinners: mean(batch.map((g) => g.goalCount)), farmerGoalWinPercent: q(farmers.filter(p=>p.won).length/farmers.length*100), averageWaste: mean(batch.map((g) => g.waste)), averageFinalSecurity: mean(batch.map((g) => g.security)) })
   }
-  const targets = [3, 5, 8].map((n) => ({ farmers: n, neverPromiseLossAtLeast90: rows.find((r) => r.farmers === n && r.table === 'neverPromise').lossPercent >= 90, noStrategyWins100: rows.filter((r) => r.farmers === n).every((r) => r.cityLosses > 0), randomLoss50to70: (() => { const rate = rows.find((r) => r.farmers === n && r.table === 'random').lossPercent; return rate >= 50 && rate <= 70 })(), sellPromiseLossAtLeast60: rows.find((r) => r.farmers === n && r.table === 'sellPromise').lossPercent >= 60, coordinatedLossUnder15: rows.find((r) => r.farmers === n && r.table === 'coordinated').lossPercent < 15 }))
+  const targets = [3, 5, 8].map((n) => ({ farmers: n, neverPromiseLossAtLeast90: rows.find((r) => r.farmers === n && r.table === 'neverPromise').lossPercent >= 90, shareGoalsUnder50: rows.find(r=>r.farmers===n&&r.table==='sharePromise').farmerGoalWinPercent < 50, coordinatedMostFarmerWinners: (()=>{const own=rows.find(r=>r.farmers===n&&r.table==='coordinated').farmerGoalWinPercent;return rows.filter(r=>r.farmers===n&&r.table!=='coordinated').every(r=>r.farmerGoalWinPercent<own)})(), noStrategyWins100: rows.filter((r) => r.farmers === n).every((r) => r.cityLosses > 0), randomLoss50to70: (() => { const rate = rows.find((r) => r.farmers === n && r.table === 'random').lossPercent; return rate >= 50 && rate <= 70 })(), sellPromiseLossAtLeast60: rows.find((r) => r.farmers === n && r.table === 'sellPromise').lossPercent >= 60, coordinatedLossUnder15: rows.find((r) => r.farmers === n && r.table === 'coordinated').lossPercent < 15 }))
   assert.equal(await readFile('src/round2/config.ts', 'utf8'), before)
-  const report = { methodology: { seeds, rng: 'Mulberry32', runs: '200 seeds for five strategies at 3, 5 and 8 farmers: 3000 games total.', selfish: 'Always Sell; no contract promise.', sellPromise: 'Always Sell and promise each round except the last.', sharePromise: 'Always Share and promise each round except the last.', random: 'Uniform random tap among currently available cards, with independent 50% contract toggle; no promises on the last round. Separate seeded decision stream preserves event comparability.', cooperative: 'Share normally; Store when a forecast warns of next-round flood (except the final round); Release in crises if stock exists, otherwise Share. Promise one unit for the next round whenever a next round remains.', mixed: 'Alternating selfish/cooperative seats, with the assignment rotated by seed; odd-size tables have one extra selfish farmer.', council: 'Automatic Council in every table: emergency-buy reserve to cover projected unmet need first, then pay for submitted hub deliveries; never override a farmer’s card. Transport and budget constrain actual delivery.', cash: 'Actual end-of-game cash, including early collective losses; only surviving farmers meeting their cash goal win.', waste: 'Spoiled harvest plus decay of farmer-owned stock; shared reserve never decays.' }, config: C, rows, targets }
+  const report = { methodology: { seeds, rng: 'Mulberry32', runs: '200 seeds for five strategies at 3, 5 and 8 farmers: 3000 games total.', selfish: 'Always Sell; no contract promise.', sellPromise: 'Always Sell and promise each round except the last.', sharePromise: 'Always Share and promise when role restrictions permit; otherwise Sell (contract gift is once per game).' , random: 'Uniform random tap among currently available cards, with independent 50% contract toggle; no promises on the last round. Separate seeded decision stream preserves event comparability.', cooperative: 'Coordinate current known need: choose low-opportunity-cost Share/Release routes until need is covered, sell surplus, store a surplus farm on warnings when its cash goal is met; Mae Tha members promise for the next round. Does not inspect future events.', mixed: 'Alternating selfish/cooperative seats, with the assignment rotated by seed; odd-size tables have one extra selfish farmer.', council: 'Automatic Council in every table: emergency-buy reserve to cover projected unmet need first, then pay for submitted hub deliveries; never override a farmer’s card. Transport and budget constrain actual delivery.', cash: 'Actual end-of-game cash, including early collective losses; only surviving farmers meeting their cash goal win.', waste: 'Spoiled harvest plus decay of farmer-owned stock; shared reserve never decays.' }, config: C, rows, targets }
   await mkdir('reports', { recursive: true })
   await writeFile(process.argv[2] ?? 'reports/blind-play.json', JSON.stringify(report, null, 2) + '\n')
   console.log(JSON.stringify({ rows, targets }, null, 2))

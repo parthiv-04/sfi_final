@@ -34,3 +34,28 @@ Adapted reference truck/crate, flood, closure and household animation patterns t
 
 ## 4 — Pest Grow step
 Ported deterministic mini-game/rng with 15-second play, loss capped at 1 unit in config, room-code seed + round, concurrent phones and sequential offline turns. Added pre-game Skip pest game, host countdown, duplicate/invalid-result rejection and host timeout for missing phones. Chose no timed help overlay so all players share the 15-second window. `npm test`: 89 passed; `npm run build`: passed.
+
+## 5 — Mixed roles, organic economics and Share balance correction
+Deals seeded 40% company farmers, 60% Mae Tha members; company input advances/debt, one-off kitchen gift, restricted cards, closure rot, slightly higher harvest, spray/hand modes, soil recovery, $2 organic certificate fee, +$1 premium, pooled buyer cap and phone profit bar are implemented. All non-card paths validate role restrictions. Kept five rounds and the +$8 personal goal. Reduced normal/festival/warning hub payout to $1 (crisis remains $2); updated coordination to choose enough current routes to feed the city and sell surplus, without future deck knowledge. Preserves the requested affordability/fair-price trade-off.
+
+To satisfy the user's additional Share test together with the specified organic economics, role economics were checked together: the old uniform-farm model lacked organic costs. Initial city security now 1.9/farmer, reserve ceil(1.1/farmer), crisis need ceil(1.5/farmer); all original targets and additional farmer-winner checks pass. Contract farmers' unavailable promises/gifts fall back to Sell in blind strategies. Pest game is skipped in balance reports to isolate distribution (explicit host option).
+
+| Farmers | Strategy | Old loss | Mixed loss | Old goal-winners | Mixed goal-winners |
+|---|---|---:|---:|---:|---:|
+| 3 | neverPromise | 100% | 95% | 0.0% | 2.5% |
+| 3 | coordinated | 4% | 6% | 82.0% | 71.17% |
+| 3 | sellPromise | 62.5% | 82% | 37.5% | 18% |
+| 3 | sharePromise | 7% | 6% | 93.0% | 28.67% |
+| 3 | random | 68% | 57% | 29.0% | 25.17% |
+| 5 | neverPromise | 100% | 98% | 0.0% | 1.2% |
+| 5 | coordinated | 1% | 6.5% | 86.5% | 66.8% |
+| 5 | sellPromise | 62.5% | 92% | 37.5% | 8% |
+| 5 | sharePromise | 1.5% | 7% | 98.5% | 35.4% |
+| 5 | random | 64.5% | 67% | 31.7% | 20.5% |
+| 8 | neverPromise | 100% | 99% | 0.0% | 0.75% |
+| 8 | coordinated | 3% | 1.5% | 85.81% | 71.56% |
+| 8 | sellPromise | 67% | 89% | 33.0% | 11% |
+| 8 | sharePromise | 6% | 2.5% | 94.0% | 35.25% |
+| 8 | random | 68% | 60.5% | 28.38% | 25.25% |
+
+Coordinated has the most farmer goal-winners at all counts and the lowest city loss (tie at 3). Share+promise goal-winners stay below 50%. Tests cover debt carryover, closure rot, soil recovery, card restrictions, organic costs/cap and fractional harvest. `npm test`: 95 passed; `npm run build`: passed. Fact plumbing was integrated with role projection; fact selection validation follows in milestone 6.

@@ -1,6 +1,6 @@
 // Network/session settings only; game balance remains in round2/config.ts.
 export const NETWORK_CONFIG = {
-  roomVersion: 5,
+  roomVersion: 6,
   draftDebounceMs: 350,
   phoneTickMs: 1000,
   heartbeatMs: 4000,
