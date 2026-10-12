@@ -1,0 +1,22 @@
+// Pixel scene primitives adapted from Two Farmers, One City to the distribution engine.
+import { Fragment } from 'react'
+import type { EventKind, Resolution } from '../round2/types'
+import { Backdrop, CountUp, Crate, Pixel, Stage, vars } from './common'
+import type { SpriteName } from './sprites'
+export function EventScene({ kind }: { kind: EventKind }) {
+  return <Stage label={`${kind} season in Chiang Mai`}><Backdrop sky={kind === 'flood' ? 'rain' : 'day'} /><Pixel name="farmer" x={24} y={88} /><Pixel name="market" x={210} y={80} scale={3} />{[0,1,2,3].map(i => <Pixel key={i} name="plant" x={90+i*25} y={112} scale={2} className="loop sway" />)}{kind === 'flood' && <div className="water anim rise" style={vars({h:'90px',dur:1.8})} />}{kind === 'marketClosure' && <><div className="shutter" style={{left:210,top:96,width:70,height:40}} /><Pixel name="lock" x={238} y={100} scale={2} /></>}{kind === 'warning' && <Pixel name="cloud" x={130} y={26} scale={5} />}{kind === 'festival' && <div className="bunting" style={{left:60,top:52,width:240,height:16}} />}</Stage>
+}
+export function RouteScene({ destination, amount, stored = 0, released = 0, closed = false }: { destination: 'market' | 'contract' | 'warehouse' | 'hub'; amount: number; stored?: number; released?: number; closed?: boolean }) {
+  const building: SpriteName = destination === 'contract' ? 'hospital' : destination === 'market' ? 'market' : 'storehouse'
+  return <Stage label={`${amount} units to ${destination}`}><Backdrop /><Pixel name="farmer" x={10} y={90} scale={2} /><Pixel name={building} x={222} y={75} scale={3} />{destination === 'hub' && <div className="tag" style={{left:154,top:18}}>Council kitchen</div>}{destination === 'warehouse' && <div className="tag" style={{left:156,top:18}}>Mae Tha stock</div>}<Pixel name="truck" x={42} y={123} scale={2} className="anim fly" style={vars({dx:'140px',dy:'0px',arc:'0px',dur:1.1})} />{Array.from({length: Math.min(12,Math.ceil(amount))},(_,i) => <Crate key={i} x={55} y={112} className="anim fly" style={vars({dx:`${168+(i%3)*10}px`,dy:`${-8-Math.floor(i/3)*12}px`,d:0.25+i*0.08,dur:1.1,arc:'28px'})} />)}{closed && <><Pixel name="lock" x={243} y={104} scale={2} /><Crate x={185} y={144} rot /></>}{destination === 'warehouse' && <div className="tag" style={{left:10,top:16}}>+{stored} / −{released}</div>}</Stage>
+}
+export function CityScene({ result }: { result: Resolution }) {
+  const count = Math.ceil(result.cityNeed), width = Math.max(320,count*38+20)
+  return <Stage w={width} h={210} label={`${result.cityDelivered} food units delivered; ${result.shortfall} unmet`}><Backdrop sky={result.shortfall ? 'night' : 'day'} />{Array.from({length:count},(_,i) => { const x=12+i*38, fed = i < result.cityNeed-result.shortfall; return <Fragment key={i}><Pixel name="house" x={x-4} y={62} scale={2.5} /><Pixel name={fed ? 'personFed' : 'personHungry'} x={x} y={110} scale={3} className={fed?'loop bob':'loop shake'} />{!fed && <div className="loop tear" style={{left:x+4,top:126,width:4,height:6,background:'#4aa3df'}} />}</Fragment> })}</Stage>
+}
+export function SecurityScene({ result, max }: { result: Resolution; max: number }) {
+  return <Stage label={`City food security ${result.securityAfter} of ${max}`}><Backdrop /><Pixel name="house" x={16} y={80} scale={4} /><div className="pixel-meter" style={{left:108,top:86,width:190,height:32}}><div className="anim fill" style={vars({w:`${result.securityAfter/max*100}%`,dur:0.7},{height:'100%',background:result.securityAfter?'#4f9d4a':'#d6453d'})} /></div><div className="num-badge" style={{left:150,top:132}}><CountUp from={result.securityBefore} to={result.securityAfter} /> / {max}</div></Stage>
+}
+export function RoleScene({ contract, debt, recovery }: { contract: boolean; debt: number; recovery: boolean }) {
+  return <Stage h={160} label={contract ? 'Company input advance' : recovery ? 'Soil recovering' : 'Mae Tha mixed crops'}><Backdrop ground={recovery?'soil':'grass'} /><Pixel name="farmer" x={24} y={78} scale={3} shirt={contract?'#4aa3df':'#5cb85c'} />{contract ? <><Pixel name="truck" x={-60} y={100} scale={2} className="anim fly" style={vars({dx:'170px',dy:'0px',arc:'0px',dur:1.2})} /><div className="tag" style={{left:166,top:26}}>Produce owed: {debt}</div></> : <>{[0,1,2,3].map(i=><Pixel key={i} name={recovery?'sprout':'plant'} x={134+i*36} y={112} scale={2} className="loop sway" />)}{recovery && <div className="loop bob label" style={{left:94,top:72}}>z z z</div>}</>}</Stage>
+}
