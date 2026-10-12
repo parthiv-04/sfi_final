@@ -42,7 +42,7 @@ describe('host authority, room flow and learning sequence', () => {
     model = run(model, 'host', 'replay', { sameEvents: true }).model
     expect(model.game!.events).toEqual(events)
     expect(model.game!.players[0].cash).toBe(C.startingCash)
-    expect(model.game!.reserve).toBe(4)
+    expect(model.game!.reserve).toBe(model.game!.rules.warehouseStartingUnits)
     expect(model.reflections).toEqual({})
     expect(model.runId).toBe(1)
     expect(model.learning.kind).toBe('howto')
