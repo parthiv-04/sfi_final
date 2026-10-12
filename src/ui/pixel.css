@@ -1,0 +1,113 @@
+:root {
+  --ink: #2b2118;
+  --paper: #f7f1e1;
+  --card: #fffaf0;
+  --green: #4f9d4a;
+  --green-dark: #2e6b2c;
+  --leaf: #a5d96a;
+  --sky: #bfe6f7;
+  --sun: #f6c744;
+  --red: #d6453d;
+  --blue: #2b6aa8;
+  --t: 1; /* animation time scale: 1 normal, 0.3 reduced, 0 skipped */
+  --loop: running;
+  color-scheme: light;
+}
+
+/* Stage (pixel scenes) */
+.stage-fit { width: 100%; max-width: 640px; margin: 0 auto; overflow: hidden; border: 4px solid var(--ink); background: var(--sky); touch-action: manipulation; }
+.stage { position: relative; transform-origin: top left; overflow: hidden; image-rendering: pixelated; }
+.stage > * { position: absolute; }
+.stage svg { display: block; }
+.sky { left: 0; top: 0; right: 0; height: 120px; background: var(--sky); }
+.sky.rain { background: #8aa7b8; }
+.sky.night { background: #6c7fa6; }
+.ground { left: 0; right: 0; top: 120px; bottom: 0; background: repeating-linear-gradient(0deg, #6fbf5b 0 16px, #62b04f 16px 32px); border-top: 4px solid var(--ink); }
+.ground.dry { background: repeating-linear-gradient(0deg, #b99a5b 0 16px, #a98a4d 16px 32px); }
+.ground.soil { background: repeating-linear-gradient(0deg, #8b5a2b 0 16px, #7b4d24 16px 32px); }
+.hills { left: 0; right: 0; top: 80px; height: 40px; background: linear-gradient(#7fbf6b, #7fbf6b) bottom/100% 16px no-repeat; }
+.label { font-size: 12px; text-shadow: 1px 1px 0 #fff; white-space: nowrap; }
+.label.dark { color: #fff; text-shadow: 1px 1px 0 var(--ink); }
+.tag { background: var(--card); border: 3px solid var(--ink); padding: 2px 6px; font-size: 13px; white-space: nowrap; }
+.num-badge { background: var(--sun); border: 3px solid var(--ink); padding: 2px 8px; font-size: 16px; }
+
+/* Animations: durations scale with --t so Skip (0) jumps to the end and reduced motion is shorter */
+.anim { animation-duration: calc(var(--t) * var(--dur, 1) * 1s); animation-delay: calc(var(--t) * var(--d, 0) * 1s); animation-fill-mode: both; animation-timing-function: steps(14, end); }
+.anim.smooth { animation-timing-function: ease-in-out; }
+.loop { animation-iteration-count: infinite; animation-play-state: var(--loop); animation-fill-mode: none; animation-duration: var(--loopdur, 1.2s); animation-delay: 0s; animation-timing-function: steps(2, end); }
+
+@keyframes fly { from { transform: translate(0, 0); opacity: 1; } 50% { transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5 - var(--arc, 24px))); } to { transform: translate(var(--dx), var(--dy)); opacity: var(--end-op, 1); } }
+@keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vanish { from { opacity: 1; } to { opacity: 0; } }
+@keyframes pop { 0% { transform: scale(0); } 70% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@keyframes slide-in { from { transform: translateX(var(--from, -140%)); } to { transform: translateX(0); } }
+@keyframes slide-out { from { transform: translateX(0); } to { transform: translateX(var(--to, 140%)); } }
+@keyframes rise { from { height: 0; } to { height: var(--h, 120px); } }
+@keyframes wash { 0% { transform: translate(0, 0) rotate(0); opacity: 1; } 100% { transform: translate(120px, 18px) rotate(70deg); opacity: 0; } }
+@keyframes rain { from { transform: translateY(-20px); } to { transform: translateY(210px); } }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes drift { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(2px); } }
+@keyframes tear { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(14px); opacity: 0; } }
+@keyframes fill { from { width: 0; } to { width: var(--w, 100%); } }
+@keyframes rot { from { filter: none; } to { filter: hue-rotate(200deg) saturate(0.5) brightness(0.7); } }
+@keyframes fly-away { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(6px, -6px); } 50% { transform: translate(-2px, -10px); } 75% { transform: translate(-6px, -4px); } }
+@keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.25; } }
+@keyframes ripple { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-8px); } }
+@keyframes swap-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes swap-in { from { opacity: 0; } to { opacity: 1; } }
+
+.fly { animation-name: fly; animation-timing-function: linear; }
+.appear { animation-name: appear; }
+.vanish { animation-name: vanish; }
+.pop { animation-name: pop; }
+.slide-in { animation-name: slide-in; }
+.slide-out { animation-name: slide-out; }
+.rise { animation-name: rise; }
+.wash { animation-name: wash; }
+.rot { animation-name: rot; }
+.fill { animation-name: fill; }
+.swap-out { animation-name: swap-out; }
+.swap-in { animation-name: swap-in; }
+.bob { animation-name: bob; }
+.sway { animation-name: sway; transform-origin: 50% 100%; }
+.drift { animation-name: drift; animation-timing-function: linear; animation-direction: alternate; animation-duration: 6s; }
+.shake { animation-name: shake; }
+.tear { animation-name: tear; animation-timing-function: linear; }
+.flies { animation-name: fly-away; animation-timing-function: linear; }
+.blink { animation-name: blink; }
+.ripple { animation-name: ripple; animation-timing-function: linear; }
+.rain-drop { animation-name: rain; animation-timing-function: linear; animation-duration: 0.9s; animation-iteration-count: infinite; animation-play-state: var(--loop); }
+
+.water { left: 0; right: 0; bottom: 0; background: repeating-linear-gradient(90deg, #4aa3df 0 16px, #3b8fcb 16px 32px); border-top: 4px solid #2b6aa8; opacity: 0.92; }
+
+/* Mini-game */
+.game-field { cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pest-hit { background: transparent; border: 0; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.timer { height: 14px; border: 3px solid var(--ink); background: #fff; }
+.timer i { display: block; height: 100%; background: var(--sun); }
+.overlay { inset: 0; background: rgba(43, 33, 24, 0.78); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; font-size: 18px; padding: 16px; z-index: 5; }
+.residue { width: 4px; height: 4px; background: #c9b8f2; }
+
+@media (prefers-reduced-motion: reduce) { :root { --loop: paused; } }
+.app[data-reduced='true'] { --loop: paused; }
+
+body {background: #d9ecb8; color: var(--ink); font-family: 'Courier New', Courier, monospace; font-weight: 700;}
+button, input, select, textarea {font: inherit; border-radius: 0;}
+button {border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); min-height: 44px;}
+button:active {transform: translateY(2px); box-shadow: 0 2px 0 var(--ink);}
+.primary {background: var(--green-dark); color: white;}
+.quiet {background: var(--card); color: var(--ink);}
+.workspace, .setup-panel, .mode-card, .seat-card, .info-card, .plan-card, .room-banner, dialog {background: var(--card); border: 4px solid var(--ink); border-radius: 0; box-shadow: 0 5px 0 var(--ink);}
+.bar-track, .bar-fill, .round-tracker span, .plan-card button {border-radius: 0;}
+h1,h2,h3 {color: var(--ink);}
+.phone-shell, .round-two-shell, .setup-shell {color: var(--ink);}
+.plan-card.selected {border-color: var(--green-dark); background: #e4efc8;}
+.stage-fit {max-width: 640px;} .pixel-label {display: block; font-size: 12px; margin: 8px 0;}
+@media (prefers-reduced-motion: reduce) { :root {--t: 0; --loop: paused;} .loop,.rain-drop {animation: none;} }
+@media (max-width: 400px) { .phone-shell, .round-two-shell {padding: 8px;} .workspace {padding: 10px;} h1 {font-size: 21px;} .plan-cards {grid-template-columns: 1fr 1fr;} .round-tracker {flex-wrap: wrap;} .round-tracker div {flex-wrap: wrap;} .plan-card button {padding: 8px; font-size: 12px;} }
+.shutter {background: repeating-linear-gradient(#777 0 5px,#aaa 5px 8px); border:3px solid var(--ink);}
+.bunting {background: repeating-linear-gradient(90deg,var(--red) 0 20px,var(--sun) 20px 40px,var(--blue) 40px 60px);}
+.pixel-meter {border:4px solid var(--ink); background:var(--paper);}
+.reveal-scene {max-width: 800px; margin:auto; padding:16px;}

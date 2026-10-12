@@ -25,3 +25,6 @@ Existing requested contract changes were already present. Tuned starting securit
 | 8 | random | 38% | 68% |
 
 All milestone 1 targets pass at every size. Baseline: 87 tests and build passed; milestone checks recorded with commit. Dependency install could not reach registry, so reused the matching local node_modules from the sibling game.
+
+## 2 — Pixel art system
+Ported sprite grids/SVG renderer, Stage/Backdrop/Pixel/Crate/Coin/CountUp and ink/paper/Courier/button/animation styles. Removed external font loading. Responsive pixel styles cover launcher, host, phone and single-screen; no engine changes. `npm test`: 87 passed; `npm run build`: passed.

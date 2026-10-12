@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import Launcher from './Launcher'
 import './styles.css'
+import './ui/pixel.css'
 
 class GameErrorBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
   state: { message: string | null } = { message: null }
