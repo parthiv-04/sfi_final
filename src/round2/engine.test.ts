@@ -1,203 +1,155 @@
 import { describe, expect, it } from 'vitest'
-import { ROUND2_CONFIG } from './config'
-import { advancePlanning, advanceRound, advanceVoting, createGame, forecastHarvest, resolveCurrentRound, rolePassed, updatePlan, winningCoopTier } from './engine'
-
+import { ROUND2_CONFIG as C } from './config'
+import { personalGoalPassed, contractArrivals, allocateDecision, previewDecision, updateDecision, finishDecisions, advanceCouncil, advancePlanning, advanceRound, createGame, currentEvent, finishPlanning, rankPlayers, resolveCurrentRound, transportCapacity, updateCouncilPlan, updatePlan, validatePlan, warehouseUnits } from './engine'
+import type { EventKind, GameState, TurnPlan } from './types'
 const names = ['A', 'B', 'C', 'D', 'E']
-const fixed = () => 0
+const seed = (value: number) => () => { value = (value + 0x6D2B79F5) >>> 0; let n = Math.imul(value ^ value >>> 15, value | 1); n ^= n + Math.imul(n ^ n >>> 7, n | 61); return ((n ^ n >>> 14) >>> 0) / 2 ** 32 }
+function game(kind: EventKind = 'normal') { const state = createGame(names, seed(1)); state.events[0] = { kind, ...C.events[kind] }; return advanceCouncil(state) }
+const routes = (patch: Partial<TurnPlan> = {}): TurnPlan => ({ marketUnits: 0, hubUnits: 0, storeUnits: 0, warehouseRelease: 0, reserveRelease: 0, contractQuantity: 0, ...patch })
+const setAll = (state: GameState, patch: Partial<TurnPlan>) => { for (const p of state.players) state.plans[p.id] = routes(patch); return state }
 
-describe('round 2 engine', () => {
-  it('uses two different shocks, keeps floods before the final round, and allows imperfect warnings', () => {
-    for (let seed = 1; seed <= 30; seed += 1) {
-      let value = seed
-      const random = () => { value = (value * 1664525 + 1013904223) >>> 0; return value / 2 ** 32 }
-      const game = createGame(names, random)
-      const shocks = Object.entries(game.shocksByRound).filter(([, shock]) => shock !== null)
-      expect(shocks).toHaveLength(2)
-      expect(new Set(shocks.map(([, shock]) => shock)).size).toBe(2)
-      expect(game.shocksByRound[1]).toBeNull()
-      expect(game.shocksByRound[5]).not.toBe('flood')
+describe('simplified food distribution engine', () => {
+  it.each(['normal', 'flood', 'marketClosure'] as EventKind[])('disrupts only crisis contracts in %s and counts failed consignments as waste', (kind) => {
+    const state = game(kind)
+    state.players[0].contracts = [{ quantity: 1, dueRound: 1 }]
+    state.plans.p1 = routes({ hubUnits: kind === 'flood' ? 0.5 : 1 })
+    const snapshot = structuredClone(state)
+    const preview = previewDecision(state, 'p1', { card: 'share', promise: false })
+    const result = finishPlanning(state)
+    const arrived = kind === 'normal' ? 1 : 0.5
+    expect(contractArrivals(state, state.players[0])).toBe(arrived)
+    expect(result.resolution!.lines[0].contractUnits).toBe(arrived)
+    expect(result.resolution!.lines[0].contractShortfall).toBe(1 - arrived)
+    expect(result.resolution!.lines[0].spoilage).toBeGreaterThanOrEqual(1 - arrived)
+    expect(preview.households).toBe(arrived + (kind === 'flood' ? 0.5 : 1))
+    expect(preview.cashMin).toBe(arrived * C.contractPrice)
+    expect(result.players[0].contracts).toEqual([])
+    expect(state).toEqual(snapshot)
+  })
+  it('sets the goal eight dollars above starting cash and pays contracts below the normal market', () => {
+    expect(createGame(names).players[0].goal).toBe(C.startingCash + 8)
+    expect(C.contractPrice).toBe(3)
+    expect(C.events.normal.price).toBe(4)
+  })
+  it('awards a personal win only when the city survives and the cash goal is reached', () => {
+    const state = game()
+    state.phase = 'debrief'
+    state.players[0].cash = state.players[0].goal
+    state.players[1].cash = state.players[1].goal - 1
+    expect(personalGoalPassed(state, state.players[0])).toBe(true)
+    expect(personalGoalPassed(state, state.players[1])).toBe(false)
+    expect(rankPlayers(state)[0].won).toBe(true)
+    state.phase = 'gameOver'
+    expect(personalGoalPassed(state, state.players[0])).toBe(false)
+    state.phase = 'debrief'; state.endedEarly = true
+    expect(personalGoalPassed(state, state.players[0])).toBe(false)
+  })
+  it.each([3, 5, 8])('finishes a full seeded game with %i farmers and records every round', (n) => {
+    let state = createGame(Array.from({ length: n }, (_, i) => `Farm ${i + 1}`), seed(1), { seat: 'automatic' })
+    for (let round = 1; round <= C.rounds; round++) {
+      state = advanceCouncil(state)
+      for (const p of state.players) state = updateDecision(state, p.id, { card: 'share', promise: round < C.rounds })
+      state = finishDecisions(state)
+      expect(state.citySecurity).toBeGreaterThan(0)
+      state = advanceRound(state)
     }
-    const falseAlarm = createGame(names, () => 0)
-    const clearRound = [2, 3, 4, 5].find((round) => !falseAlarm.shocksByRound[round])!
-    expect(falseAlarm.riskSignals[clearRound]).not.toBeNull()
-    const missedWarning = createGame(names, () => 0.99)
-    const shockRound = [2, 3, 4, 5].find((round) => missedWarning.shocksByRound[round])!
-    expect(missedWarning.riskSignals[shockRound]).toBeNull()
+    expect(state.phase).toBe('debrief')
+    expect(state.history).toHaveLength(C.rounds)
+    expect(rankPlayers(state)).toHaveLength(n)
   })
-
-  it('charges for optional shock cover and pays only when a shock occurs', () => {
-    const game = createGame(names, fixed)
-    game.round = 2
-    game.shocksByRound[2] = null
-    game.plans.p1.shockFund = true
-    const quiet = resolveCurrentRound(game)
-    expect(quiet.resolution!.lines[0]).toMatchObject({ fundCost: 2, fundPayout: 0 })
-    expect(quiet.players[0].cash).toBe(14)
-
-    game.shocksByRound[2] = 'tourismCollapse'
-    const shocked = resolveCurrentRound(game)
-    expect(shocked.resolution!.lines[0]).toMatchObject({ fundCost: 2, fundPayout: 4 })
-    expect(shocked.players[0].cash).toBe(18)
-    game.players[0].cash = 1
-    expect(() => advancePlanning(game)).toThrow('cannot buy shock cover')
+  it('turns one-tap cards into allocations, rounding the shared half up', () => {
+    const state = game()
+    expect(allocateDecision(state, 'p1', { card: 'sell', promise: false }).marketUnits).toBe(2)
+    expect(allocateDecision(state, 'p1', { card: 'share', promise: false })).toMatchObject({ hubUnits: 1, marketUnits: 1 })
+    state.players[0].contracts = [{ quantity: 1, dueRound: 1 }]
+    expect(allocateDecision(state, 'p1', { card: 'share', promise: true })).toMatchObject({ hubUnits: 1, marketUnits: 0, contractQuantity: 1 })
+    expect(previewDecision(state, 'p1', { card: 'share', promise: true }).households).toBe(2)
+    expect(allocateDecision(state, 'p1', { card: 'store', promise: false }).storeUnits).toBe(1)
   })
-
-  it('moves directly from the fifth farmer to results when no one joins the co-op', () => {
-    let game = createGame(names, fixed)
-    for (let index = 0; index < 5; index += 1) game = advancePlanning(game)
-    expect(game.phase).toBe('resolution')
-    expect(game.activePlayerIndex).toBe(0)
-    expect(game.resolution).not.toBeNull()
+  it('shows Release only for stored food, preserves transport limits and lets zero-harvest farms decide', () => {
+    const state = game('flood')
+    expect(() => allocateDecision(state, 'p1', { card: 'release', promise: false })).toThrow('Choose')
+    state.warehouse = [{ ownerId: 'p1', units: 3, depositedRound: 0 }]
+    state.players[0].harvest = 0
+    expect(allocateDecision(state, 'p1', { card: 'release', promise: true })).toMatchObject({ warehouseRelease: 1.5, marketUnits: 0, contractQuantity: 1 })
+    expect(updateDecision(state, 'p2', { card: 'store', promise: true }).decisions.p2.promise).toBe(true)
   })
-
-  it('validates each plan before passing the device and prevents editing a past turn', () => {
-    let game = createGame(names, fixed)
-    game.players[0].harvest = { mode: 'conventional', units: 2, plantedRound: 0 }
-    game = updatePlan(game, 'p1', { saleTier: null })
-    expect(() => advancePlanning(game)).toThrow('A must price their available harvest')
-    game = updatePlan(game, 'p1', { saleTier: 'affordable' })
-    game = advancePlanning(game)
-    expect(game.activePlayerIndex).toBe(1)
-    expect(updatePlan(game, 'p1', { saleTier: 'premium' }).plans.p1.saleTier).toBe('affordable')
+  it('applies the human Council after cards have been submitted, preserving their intent', () => {
+    let state = game()
+    for (const p of state.players) state = updateDecision(state, p.id, { card: 'store', promise: true })
+    state = finishDecisions(state)
+    expect(state.phase).toBe('council')
+    state = advanceCouncil(updateCouncilPlan(state, { policy: 'procurement', quantity: 2, farmerId: 'p1' }))
+    expect(state.resolution!.lines[0]).toMatchObject({ hubUnits: 2, stored: 0 })
+    expect(state.resolution!.lines[1].stored).toBe(2)
+    expect(state.players[0].contracts).toEqual([{ quantity: 1, dueRound: 2 }])
   })
-
-  it('blocks base plots for one conversion round but grants an immediate organic co-op plot', () => {
-    let game = createGame(names, fixed)
-    game = updatePlan(game, 'p1', { joinCoop: true })
-    for (let index = 0; index < 5; index += 1) game = advancePlanning(game)
-    expect(game.phase).toBe('voting')
-    expect(game.players[0].farmStatus).toBe('converting')
-    expect(game.players[0].growingHarvest).toEqual({ mode: 'organic', units: ROUND2_CONFIG.yieldPerPlot, plantedRound: 1 })
-    game = advanceVoting(game)
-    expect(game.resolution!.lines[0].costs).toBe(ROUND2_CONFIG.organicCostPerRound)
-    game = advanceRound(game)
-    expect(game.players[0].farmStatus).toBe('organic')
+  it('automatic Council cannot redirect a Sell choice into crisis hub deliveries', () => {
+    let state = createGame(names, seed(1), { seat: 'automatic' })
+    state = advanceCouncil(state)
+    state.events[0] = { kind: 'marketClosure', ...C.events.marketClosure }
+    state.reserve = 0
+    state = finishDecisions(state)
+    expect(state.resolution!.hubDelivered).toBe(0)
+    expect(state.resolution!.shortfall).toBe(state.rules.cityCrisisNeed)
+    expect(state.council.spent).toBe(0)
+    expect(state.plans.p1.hubUnits).toBe(0)
   })
-
-  it('removes a personal price control when joining the co-op', () => {
-    let game = createGame(names, fixed)
-    game.players[0].harvest = { mode: 'conventional', units: 2, plantedRound: 0 }
-    game = updatePlan(game, 'p1', { joinCoop: true, saleTier: 'premium' })
-    expect(game.plans.p1.saleTier).toBeNull()
+  it('automatic Council buys reserve first and funds crisis hub food with the remainder', () => {
+    let state = createGame(['A', 'B', 'C'], seed(1), { seat: 'automatic' })
+    state.events[0] = { kind: 'marketClosure', ...C.events.marketClosure }
+    state = advanceCouncil(state)
+    state.plans.p1 = routes({ hubUnits: 1 })
+    state = finishPlanning(state)
+    expect(state.resolution!.hubDelivered).toBe(state.rules.cityCrisisNeed)
+    expect(state.resolution!.councilReserveReleased).toBe(4)
+    expect(state.council.budget).toBe(state.rules.councilStartingBudget - 4 * C.procurementPrice - C.hubPrice)
+    expect(state.council.explanation).toContain('because')
   })
-
-  it('uses Standard for a tied co-op vote', () => {
-    const game = createGame(names, fixed)
-    game.votes = { p1: 'affordable', p2: 'premium' }
-    expect(winningCoopTier(game)).toBe('standard')
+  it.each([
+    [3, 5, 6, 4, 18], [5, 7, 10, 6, 30], [8, 12, 16, 10, 48],
+  ])('scales the resources for %i farmers', (n, crisis, maximum, reserve, budget) => {
+    const state = createGame(Array.from({ length: n }, (_, i) => `Farmer ${i + 1}`), seed(1))
+    expect(state.rules).toMatchObject({ playerCount: n, cityNeed: n, cityCrisisNeed: crisis, cityMaxSecurity: maximum })
+    expect(state.citySecurity).toBe(maximum)
+    expect(state.reserve).toBe(reserve)
+    expect(state.council.budget).toBe(budget)
+    for (const event of state.events) expect(event.capacity).toBe(Math.ceil(n * C.marketShares[event.kind]))
   })
-
-  it('allocates lower-priced supply before higher-priced supply and splits equal offers', () => {
-    let game = createGame(names, fixed)
-    game.round = 2
-    game.shocksByRound[2] = null
-    game.demandDeck[0].demand.conventional.local = { affordable: 5, standard: 3, premium: 0 }
-    game.players[0].harvest = { mode: 'conventional', units: 4, plantedRound: 1 }
-    game.players[1].harvest = { mode: 'conventional', units: 4, plantedRound: 1 }
-    game.players[2].harvest = { mode: 'conventional', units: 2, plantedRound: 1 }
-    game.plans.p1.saleTier = 'affordable'
-    game.plans.p2.saleTier = 'affordable'
-    game.plans.p3.saleTier = 'standard'
-    game = resolveCurrentRound(game)
-    expect(game.resolution!.lines[0].marketUnits).toBe(4)
-    expect(game.resolution!.lines[1].marketUnits).toBe(4)
-    expect(game.resolution!.lines[2].marketUnits).toBe(0)
+  it('keeps the Council pre-position commitment available when hub food competes for its budget', () => {
+    let state = createGame(names, seed(1))
+    state.council.budget = 4
+    state = advanceCouncil(updateCouncilPlan(state, { policy: 'prePosition', quantity: 4 }))
+    state = setAll(state, { hubUnits: 1, storeUnits: 1 })
+    const result = finishPlanning(state)
+    expect(result.totalHubUnits).toBe(0)
+    expect(result.resolution!.lines.reduce((sum, line) => sum + line.revenue, 0)).toBe(4)
+    expect(result.council.budget).toBe(0)
   })
-
-  it('aggregates local and tourist demand within the organic market', () => {
-    let game = createGame(names, fixed)
-    game.round = 2
-    game.shocksByRound[2] = null
-    game.players[0].harvest = { mode: 'organic', units: 2, plantedRound: 1 }
-    game.plans.p1.saleTier = 'standard'
-    game = resolveCurrentRound(game)
-    const organic = game.resolution!.markets.find((market) => market.mode === 'organic')!
-    expect(organic.demand.local.standard).toBeGreaterThan(0)
-    expect(organic.demand.tourist.standard).toBeGreaterThan(0)
-  })
-
-  it('charges $2 while only converting and $6 once organic land is ready', () => {
-    let game = createGame(names, fixed)
-    game.players[0].farmStatus = 'converting'
-    game.players[0].conversionStartedRound = 1
-    game = resolveCurrentRound(game)
-    expect(game.resolution!.lines[0].costs).toBe(ROUND2_CONFIG.conventionalCostPerRound)
-  })
-
-  it('bounds a new contract by forecast output and permits a new one while an old one is due', () => {
-    let game = createGame(names, fixed)
-    game.round = 2
-    game.players[0].coop = true
-    game.players[0].farmStatus = 'organic'
-    game.players[0].harvest = { mode: 'organic', units: 3, plantedRound: 1 }
-    game.players[0].contracts = [{ id: 'old', quantity: 1, dueRound: 2, pricePerUnit: 4, signedRound: 1 }]
-    expect(forecastHarvest(game.players[0], game.plans.p1, 2)?.units).toBe(3)
-    game = updatePlan(game, 'p1', { contractQuantity: 9 })
-    expect(game.plans.p1.contractQuantity).toBe(3)
-    game = updatePlan(game, 'p1', { contractQuantity: 2 })
-    for (let index = 0; index < 5; index += 1) game = advancePlanning(game)
-    game = advanceVoting(game)
-    expect(game.players[0].contracts).toEqual([expect.objectContaining({ quantity: 2, dueRound: 3, pricePerUnit: 4 })])
-  })
-
-  it('records flood losses in both plot state and crisis impact', () => {
-    let game = createGame(names, fixed)
-    game.round = 2
-    game.shocksByRound[2] = 'flood'
-    game.players[0].growingHarvest = { mode: 'conventional', units: 2, plantedRound: 2 }
-    game.players[0].land[0].state = 'growing-conventional'
-    game.players[0].land[1].state = 'growing-conventional'
-    game = resolveCurrentRound(game)
-    expect(game.resolution!.crisisImpact!.playerImpacts[0].growingCropsLost).toBe(1)
-    expect(game.players[0].land.some((plot) => plot.state === 'crisis-affected')).toBe(true)
-  })
-
-  it('states the open-market inventory blocked by a market closure', () => {
-    let game = createGame(names, fixed)
-    game.round = 2
-    game.shocksByRound[2] = 'marketClosure'
-    game.players[0].harvest = { mode: 'conventional', units: 2, plantedRound: 1 }
-    game.plans.p1.saleTier = 'affordable'
-    game = resolveCurrentRound(game)
-    expect(game.resolution!.crisisImpact!.playerImpacts).toContainEqual(expect.objectContaining({ playerId: 'p1', openMarketBlocked: 2 }))
-    expect(game.resolution!.lines[0].marketUnits).toBe(0)
-  })
-
-  it('removes and records tourist demand during a tourism collapse', () => {
-    let game = createGame(names, fixed)
-    game.round = 2
-    game.shocksByRound[2] = 'tourismCollapse'
-    game.players[0].harvest = { mode: 'organic', units: 1, plantedRound: 1 }
-    game.plans.p1.saleTier = 'standard'
-    game = resolveCurrentRound(game)
-    const organicMarket = game.resolution!.markets.find((market) => market.mode === 'organic')!
-    expect(organicMarket.demand.tourist.standard).toBe(0)
-    expect(game.resolution!.crisisImpact!.touristDemandRemoved).toBeGreaterThan(0)
-  })
-
-  it('counts organic contract delivery toward the Organic Pioneer goal', () => {
-    let game = createGame(names, fixed)
-    game.round = 2
-    game.shocksByRound[2] = null
-    game.players[0].role = 'Organic Pioneer'
-    game.players[0].harvest = { mode: 'organic', units: 3, plantedRound: 1 }
-    game.players[0].contracts = [{ id: 'organic-contract', quantity: 3, dueRound: 2, pricePerUnit: 4, signedRound: 1 }]
-    game = resolveCurrentRound(game)
-    expect(game.players[0].metrics.organicUnitsSold).toBe(3)
-    expect(rolePassed(game.players[0])).toBe(true)
-  })
-
-  it('can complete all five rounds with fixed player order', () => {
-    let game = createGame(names, fixed)
-    for (let round = 1; round <= 5; round += 1) {
-      for (let index = 0; index < 5; index += 1) game = advancePlanning(game)
-      if (game.phase === 'voting') {
-        for (let index = 0; index < game.votePlayerIds.length; index += 1) {
-          game = advanceVoting(game)
-        }
-      }
-      game = advanceRound(game)
-    }
-    expect(game.phase).toBe('debrief')
-  })
+  it('starts with a harvest and a separate six-unit permanent reserve', () => { const state = createGame(names, seed(1)); expect(state.players.every((p) => p.harvest === C.harvestPerFarm)).toBe(true); expect(state.reserve).toBe(C.warehouseStartingUnits); expect(state.warehouse).toEqual([]); expect(state.citySecurity).toBe(C.cityStartingSecurity) })
+  it('is pure and deterministic given an injected random function', () => { expect(createGame(names, seed(37))).toEqual(createGame(names, seed(37))); const state = game(); const before = structuredClone(state); finishPlanning(state); expect(state).toEqual(before) })
+  it('reveals the event before planning and uses its market price and capacity', () => { const result = finishPlanning(game('festival')); expect(currentEvent(result).label).toBe(C.events.festival.label); expect(result.resolution!.lines.every((line) => line.marketUnits === C.harvestPerFarm && line.revenue === C.harvestPerFarm * C.events.festival.price)).toBe(true) })
+  it('shares limited market demand exactly and preserves all food', () => { const result = finishPlanning(game()); expect(result.resolution!.lines.reduce((s, l) => s + l.marketUnits, 0)).toBe(C.events.normal.capacity); for (const line of result.resolution!.lines) expect(line.marketUnits + line.spoilage).toBe(line.harvest) })
+  it('closes the market while leaving contracts and hub routes open', () => { const state = game('marketClosure'); state.players[0].contracts = [{ quantity: 1, dueRound: 1 }]; state.plans.p1 = routes({ hubUnits: 1 }); const result = finishPlanning(state); expect(result.resolution!.lines[0]).toMatchObject({ marketUnits: 0, contractUnits: 0.5, hubUnits: 1, revenue: C.contractPrice * 0.5 + C.hubPrice }) })
+  it('caps pre-orders at one unit, delivers next round and pays the fixed price', () => { let state = game(); state = setAll(state, { hubUnits: 2, contractQuantity: 1 }); state = finishPlanning(state); expect(state.players[0].contracts).toEqual([{ quantity: 1, dueRound: 2 }]); state = advanceRound(state); state.events[1] = { kind: 'normal', ...C.events.normal }; state = advanceCouncil(state); const result = finishPlanning(state); expect(result.resolution!.lines.every((line) => line.contractUnits === 1 && line.revenue >= C.contractPrice)).toBe(true); expect(result.resolution!.contractsDelivered).toBe(5) })
+  it('rejects over-contracting and contracts beyond the final round', () => { const state = game(); expect(() => validatePlan(state, 'p1', routes({ contractQuantity: 2 }))).toThrow('Contract limit'); state.round = C.rounds; expect(() => validatePlan(state, 'p1', routes({ contractQuantity: 1 }))).toThrow('no next round') })
+  it('halves transport in a flood and only the next round harvest', () => { let state = game('flood'); expect(state.players[0].harvest).toBe(2); expect(transportCapacity(state)).toBe(1.5); expect(() => validatePlan(state, 'p1', routes({ hubUnits: 2 }))).toThrow('transport'); state = advanceRound(finishPlanning(state)); expect(state.players.every((p) => p.harvest === 1)).toBe(true); state.events[1] = { kind: 'normal', ...C.events.normal }; state = advanceRound(finishPlanning(setAll(advanceCouncil(state), { hubUnits: 1 }))); expect(state.players.every((p) => p.harvest === 2)).toBe(true) })
+  it('preserves reserve without decay, cost or payout', () => { const result = finishPlanning(game()); expect(result.reserve).toBe(6); expect(result.resolution!.lines.every((line) => line.storageCost === 0 && line.decay === 0)).toBe(true) })
+  it('charges owners for held stock, then rounds pooled decay down', () => { const state = setAll(game(), { storeUnits: 2 }); const result = finishPlanning(state); expect(warehouseUnits(result)).toBe(8); expect(result.resolution!.lines[0]).toMatchObject({ stored: 2, storageCost: 2, decay: 2, spoilage: 0 }); expect(result.players.every((p) => p.cash === C.startingCash - 2)).toBe(true); expect(result.totalWaste).toBe(2); expect(result.reserve).toBe(6) })
+  it('releases only a farmer’s own deposited stock and pays actual funded units', () => { const state = game(); state.warehouse = [{ ownerId: 'p1', units: 2, depositedRound: 0 }]; state.council.budget = 2; state.plans.p1 = routes({ warehouseRelease: 2 }); expect(() => validatePlan(state, 'p2', routes({ warehouseRelease: 1 }))).toThrow('your stored'); const result = finishPlanning(state); expect(result.resolution!.lines[0]).toMatchObject({ warehouseReleased: 1, revenue: 2, storageCost: 1 }); expect(result.council.budget).toBe(0); expect(warehouseUnits(result)).toBe(1) })
+  it('allows any farmer to move reserve, without cash payout or budget cost', () => { const state = game(); state.council.budget = 0; state.plans.p5 = routes({ reserveRelease: 3 }); const result = finishPlanning(state); expect(result.resolution!.lines[4]).toMatchObject({ reserveReleased: 3, hubUnits: 3, revenue: 0, transportUsed: 3 }); expect(result.reserve).toBe(3) })
+  it('Council reserve deliveries use spare farm transport and cannot move inaccessible stock', () => { let state = createGame(names, seed(1)); state.events[0] = { kind: 'normal', ...C.events.normal }; state = advanceCouncil(updateCouncilPlan(state, { reserveRelease: 4 })); const result = finishPlanning(state); expect(result.resolution!.councilReserveReleased).toBe(4); expect(result.reserve).toBe(2); expect(result.resolution!.lines.every((line) => line.transportUsed <= line.transportCapacity)).toBe(true) })
+  it('counts school/hospital contracts toward normal need, but needs the hub for extra crisis demand', () => { const state = game('marketClosure'); for (const p of state.players) { p.contracts = [{ quantity: 1, dueRound: 1 }]; state.plans[p.id] = routes() } const result = finishPlanning(state); expect(result.resolution).toMatchObject({ contractsDelivered: 2.5, hubDelivered: 0, cityNeed: 7, crisisHubNeed: 2, shortfall: 4.5 }); expect(result.citySecurity).toBe(5.5); for (const p of state.players) state.plans[p.id].hubUnits = 1; expect(finishPlanning(state).citySecurity).toBe(10) })
+  it('recovers one point when all need is met and never exceeds ten', () => { const state = setAll(game(), { hubUnits: 1 }); state.citySecurity = 6; expect(finishPlanning(state).citySecurity).toBe(7); state.citySecurity = 10; expect(finishPlanning(state).citySecurity).toBe(10) })
+  it('loses one per unmet unit and ends immediately at zero', () => { const state = game(); state.citySecurity = 5; const result = finishPlanning(state); expect(result.citySecurity).toBe(0); expect(result.phase).toBe('gameOver'); expect(advanceRound(result)).toEqual(result); expect(finishPlanning(result)).toEqual(result); expect(rankPlayers(result)).toEqual([]) })
+  it('caps hub delivery at the available Council budget without paying fractional overdrafts', () => { const state = setAll(game(), { hubUnits: 2 }); state.council.budget = 1; const result = finishPlanning(state); expect(result.totalHubUnits).toBe(0.5); expect(result.council.budget).toBe(0); expect(result.resolution!.lines[0].revenue).toBe(1) })
+  it('pre-position pays only for actual deposits and offsets current storage cost', () => { let state = createGame(names, seed(1)); state = advanceCouncil(updateCouncilPlan(state, { policy: 'prePosition', quantity: 4 })); state = setAll(state, { storeUnits: 1 }); const result = finishPlanning(state); expect(result.resolution!.councilSpent).toBe(4); expect(result.players.slice(0, 4).every((p) => p.cash === C.startingCash)).toBe(true); expect(result.players[4].cash).toBe(C.startingCash - 1) })
+  it('emergency buying feeds the hub, pays three per unit and reserves farmer food', () => { let state = createGame(names, seed(1)); state.events[0] = { kind: 'marketClosure', ...C.events.marketClosure }; state = advanceCouncil(updateCouncilPlan(state, { policy: 'procurement', quantity: 2, farmerId: 'p3' })); expect(() => validatePlan(state, 'p3', routes({ hubUnits: 1 }))).toThrow('harvest'); const result = finishPlanning(state); expect(result.resolution!.lines[2]).toMatchObject({ hubUnits: 2, revenue: 6 }); expect(result.council.budget).toBe(24) })
+  it('extra trucks increase farm capacity, are halved in a flood and cost six once', () => { let state = createGame(names, seed(1)); state.events[0] = { kind: 'flood', ...C.events.flood }; state = advanceCouncil(updateCouncilPlan(state, { policy: 'extraTrucks' })); expect(transportCapacity(state)).toBe(3.5); expect(finishPlanning(state).council.budget).toBe(24) })
+  it('validates Council policy limits and affordability', () => { const state = createGame(names, seed(1)); expect(() => advanceCouncil(updateCouncilPlan(state, { quantity: 5 }))).toThrow('limit'); state.council.budget = 5; expect(() => advanceCouncil(updateCouncilPlan(state, { policy: 'extraTrucks' }))).toThrow('afford') })
+  it('allows simultaneous drafts in any order and rejects duplicate pass-and-play submissions', () => { let state = game(); state = advancePlanning(updatePlan(state, 'p5', { contractQuantity: 1 }), 'p5'); expect(state.phase).toBe('planning'); expect(state.ready).toEqual(['p5']); expect(advancePlanning(state, 'p5')).toEqual(state); state = finishPlanning(state); expect(state.resolution).not.toBeNull() })
+  it('validates transport, harvest, finite numbers and reserve over-allocation', () => { let state = game(); for (const patch of [{ hubUnits: -1 }, { hubUnits: NaN }, { hubUnits: 0.005 }, { hubUnits: 3 }, { reserveRelease: 4 }]) expect(() => validatePlan(state, 'p1', routes(patch))).toThrow(); state = advancePlanning(updatePlan(state, 'p1', routes({ reserveRelease: 3 })), 'p1'); state = advancePlanning(updatePlan(state, 'p2', routes({ reserveRelease: 3 })), 'p2'); expect(() => validatePlan(state, 'p3', routes({ reserveRelease: 1 }))).toThrow('allocated') })
+  it('keeps warnings correct given seeded rolls, including false warnings', () => { let hits = 0, warnings = 0; for (let s = 1; s <= 1000; s++) { const state = createGame(names, seed(s)); for (let i = 0; i < C.rounds - 1; i++) if (state.events[i].kind === 'warning') { warnings++; if (state.events[i].forecastHits) hits++; expect(state.events[i + 1].kind === 'flood').toBe(state.events[i].forecastHits) } } expect(hits / warnings).toBeGreaterThan(0.55); expect(hits / warnings).toBeLessThan(0.65) })
+  it('ranks only surviving games by cash, sharing tied ranks', () => { const state = game(); state.phase = 'debrief'; state.players[0].cash = 40; state.players[1].cash = 40; state.players[2].cash = 30; expect(rankPlayers(state).map((p) => p.rank)).toEqual([1, 1, 3, 4, 4]); expect(rankPlayers(state)[0].cash).toBe(40) })
+  it('configures a sixty-second window and two-second reveal steps', () => { expect(C.planningSeconds).toBe(60); expect(C.revealStepMs).toBe(2 * C.millisecondsPerSecond); expect(C.revealSteps).toBe(Object.keys(C.revealStage).length) })
 })

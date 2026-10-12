@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "staging": "foodresiliencesfi",
+    "default": "foodresiliencesfi"
+  },
+  "targets": {},
+  "etags": {}
+}

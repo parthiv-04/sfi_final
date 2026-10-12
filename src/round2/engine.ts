@@ -1,408 +1,273 @@
-import { ROUND2_CONFIG, ROUND2_DEMAND_DECK } from './config'
-import { Contract, CrisisImpact, DemandCard, GameState, LandPlot, MarketSnapshot, Mode, Player, PlotState, ResolutionLine, Role, ROLES, ShockType, SOURCES, Source, SourceDemand, Tier, TIERS, TierValues, TurnPlan } from './types'
-
+import { ROUND2_CONFIG as C, scaledRules } from './config'
+import type { CouncilPlan, Decision, DecisionPreview, EventCard, EventKind, GameState, Player, PlayerScore, ResolutionLine, TurnPlan } from './types'
 const clone = <T,>(value: T): T => structuredClone(value)
-const emptyTiers = (): TierValues => ({ affordable: 0, standard: 0, premium: 0 })
-const tierRank = (tier: Tier) => TIERS.indexOf(tier)
-const round2 = (value: number) => Math.round(value * 100) / 100
-const shuffle = <T,>(items: T[], random = Math.random): T[] => {
-  const result = [...items]
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swap = Math.floor(random() * (index + 1))
-    ;[result[index], result[swap]] = [result[swap], result[index]]
+const q = (value: number) => Math.round(value * C.quantityPrecision) / C.quantityPrecision
+const affordable = (budget: number, price: number) => Math.floor((budget / price + Number.EPSILON) * C.quantityPrecision) / C.quantityPrecision
+export const emptyPlan = (): TurnPlan => ({ marketUnits: C.harvestPerFarm, hubUnits: 0, storeUnits: 0, warehouseRelease: 0, reserveRelease: 0, contractQuantity: 0 })
+export const emptyCouncilPlan = (farmerId: string): CouncilPlan => ({ policy: 'none', quantity: 0, farmerId, reserveRelease: 0 })
+export const currentEvent = (state: GameState) => state.events[state.round - 1]
+export const isCrisis = (state: GameState) => ['flood', 'marketClosure'].includes(currentEvent(state).kind)
+export const warehouseUnits = (state: GameState, ownerId?: string) => q(state.warehouse.filter((lot) => !ownerId || lot.ownerId === ownerId).reduce((sum, lot) => sum + lot.units, 0))
+export const contractsDue = (state: GameState, player: Player) => q(player.contracts.filter((contract) => contract.dueRound === state.round).reduce((sum, contract) => sum + contract.quantity, 0))
+export const contractArrivals = (state: GameState, player: Player) => q(Math.min(player.harvest, contractsDue(state, player), transportCapacity(state)) * (isCrisis(state) ? C.crisisContractArrivalFraction : 1))
+export const transportCapacity = (state: GameState) => q((C.farmTransport + (state.council.plan.policy === 'extraTrucks' ? C.extraTruckCapacity : 0)) * (currentEvent(state).kind === 'flood' ? C.floodTransportFraction : 1))
+export const nextHarvest = (state: GameState) => C.harvestPerFarm * (currentEvent(state).kind === 'flood' ? C.floodHarvestFraction : 1)
+export const procurementReserved = (state: GameState, player: Player) => state.council.plan.policy === 'procurement' && state.council.plan.farmerId === player.id ? Math.min(state.council.plan.quantity, Math.max(0, player.harvest - contractsDue(state, player)), Math.max(0, transportCapacity(state) - Math.min(player.harvest, contractsDue(state, player)))) : 0
+export const availableHarvest = (state: GameState, player: Player) => q(Math.max(0, player.harvest - contractsDue(state, player) - procurementReserved(state, player)))
+export const defaultPlan = (state: GameState, player: Player): TurnPlan => ({ ...emptyPlan(), marketUnits: Math.min(availableHarvest(state, player), Math.max(0, transportCapacity(state) - Math.min(player.harvest, contractsDue(state, player)) - procurementReserved(state, player))) })
+function deck(random: () => number, n: number): EventCard[] {
+  const cards = (Object.keys(C.eventCopies) as EventKind[]).flatMap((kind) => Array.from({ length: C.eventCopies[kind] }, (): EventCard => ({ kind, ...C.events[kind], capacity: Math.ceil(n * C.marketShares[kind]) })))
+  for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]] }
+  for (let i = 0; i < cards.length; i++) {
+    if (cards[i].kind !== 'warning') continue
+    cards[i].forecastHits = random() < C.eventForecastAccuracy
+    if (i + 1 < cards.length) {
+      if (cards[i].forecastHits) cards[i + 1] = { kind: 'flood', ...C.events.flood, capacity: Math.ceil(n * C.marketShares.flood) }
+      else if (cards[i + 1].kind === 'flood') cards[i + 1] = { kind: 'normal', ...C.events.normal, capacity: Math.ceil(n * C.marketShares.normal) }
+    }
   }
-  return result
+  return cards
 }
-
-const freshLand = (): LandPlot[] => [
-  { id: 'base-1', kind: 'base', state: 'empty' },
-  { id: 'base-2', kind: 'base', state: 'empty' },
-  { id: 'coop-1', kind: 'coop', state: 'empty' },
-]
-
-const emptyPlan = (player: Player): TurnPlan => ({
-  saleTier: player.harvest && !player.coop ? 'standard' : null,
-  joinCoop: false,
-  startConversion: false,
-  contractQuantity: null,
-  shockFund: false,
-})
-
-export const conversionRoundsLeft = (player: Player, round: number): number => {
-  if (player.farmStatus !== 'converting' || player.conversionStartedRound === null) return 0
-  return Math.max(0, 1 - (round - player.conversionStartedRound))
+export function createGame(names: string[], random = Math.random, council: { name?: string; seat?: 'player' | 'automatic' } = {}): GameState {
+  const rules = scaledRules(names.length)
+  const state: GameState = { rules, history: [], endedEarly: false, round: 1, phase: 'council', players: names.map((name, i) => ({ id: `p${i + 1}`, name: name.trim() || `Farmer ${i + 1}`, cash: C.startingCash, goal: C.startingCash + C.personalGoalBonus, harvest: C.harvestPerFarm, contracts: [], waste: 0 })), plans: {}, decisions: {}, ready: [], activePlayerIndex: 0, events: deck(random, names.length), warehouse: [], reserve: rules.warehouseStartingUnits, council: { name: council.name?.trim() || 'Food Council', seat: council.seat ?? 'player', budget: rules.councilStartingBudget, spent: 0, explanation: '', plan: emptyCouncilPlan('p1') }, citySecurity: rules.cityStartingSecurity, totalHubUnits: 0, totalContractsDelivered: 0, crisisWarehouseUnits: 0, totalWaste: 0, resolution: null }
+  state.plans = Object.fromEntries(state.players.map((p) => [p.id, defaultPlan(state, p)]))
+  state.decisions = Object.fromEntries(state.players.map((p) => [p.id, { card: 'sell', promise: false }]))
+  return state
 }
-
-export const farmOperatingCost = (player: Player): number =>
-  player.coop || player.farmStatus === 'organic' ? ROUND2_CONFIG.organicCostPerRound : ROUND2_CONFIG.conventionalCostPerRound
-
-export const roleInstruction = (role: Role): string => ({
-  'Community Anchor': 'Sell 3 units to Local buyers at the Affordable tier.',
-  'Organic Pioneer': 'Sell any 3 organic crop units through a market or contract.',
-  Independent: 'Never join the co-op and finish with more cash than you started.',
-  'Institution Builder': 'Sign and fulfil 2 institutional contracts.',
-})[role]
-
-export const rolePassed = (player: Player): boolean => {
-  if (player.role === 'Community Anchor') return player.metrics.affordableLocalSales >= 3
-  if (player.role === 'Organic Pioneer') return player.metrics.organicUnitsSold >= 3
-  if (player.role === 'Independent') return !player.coop && player.cash > player.startingCash
-  return player.metrics.contractsSigned >= 2 && player.metrics.contractsFulfilled >= 2
+function quantity(value: number): void {
+  if (!Number.isFinite(value) || value < 0 || q(value) !== value) throw new Error('Use non-negative quantities with at most two decimals.')
 }
-
-export function forecastHarvest(player: Player, plan: TurnPlan, round: number): Player['growingHarvest'] {
-  const willCoop = player.coop || plan.joinCoop
-  const willConvert = player.farmStatus === 'conventional' && (plan.startConversion || plan.joinCoop)
-  const futureStatus = willConvert ? 'converting' : player.farmStatus
-  const basePlots = futureStatus === 'conventional' || futureStatus === 'organic' ? ROUND2_CONFIG.basePlots : 0
-  const mode: Mode = futureStatus === 'conventional' ? 'conventional' : 'organic'
-  const plots = basePlots + (willCoop ? ROUND2_CONFIG.coopOrganicPlots : 0)
-  return plots ? { mode, units: plots * ROUND2_CONFIG.yieldPerPlot, plantedRound: round } : null
+export function updateCouncilPlan(state: GameState, patch: Partial<CouncilPlan>): GameState {
+  const next = clone(state)
+  if (next.phase === 'council') next.council.plan = { ...next.council.plan, ...patch }
+  return next
 }
-
-export function previewLandPlots(player: Player, plan: TurnPlan): LandPlot[] {
-  const willCoop = player.coop || plan.joinCoop
-  const willConvert = player.farmStatus === 'conventional' && (plan.startConversion || plan.joinCoop)
-  const baseState: PlotState = willConvert || player.farmStatus === 'converting' ? 'converting' : player.farmStatus === 'organic' ? 'growing-organic' : 'growing-conventional'
-  return freshLand().map((plot) => plot.kind === 'base' ? { ...plot, state: baseState } : { ...plot, state: willCoop ? 'growing-organic' : 'empty' })
-}
-
-export function createGame(names: string[], random = Math.random): GameState {
-  const roleBag: Role[] = [...ROLES, ROLES[Math.floor(random() * ROLES.length)]]
-  const roles = shuffle(roleBag, random)
-  const players = names.slice(0, ROUND2_CONFIG.playerCount).map((name, index): Player => ({
-    id: `p${index + 1}`,
-    name: name.trim() || `Farmer ${index + 1}`,
-    role: roles[index],
-    cash: ROUND2_CONFIG.startingCash,
-    startingCash: ROUND2_CONFIG.startingCash,
-    coop: false,
-    farmStatus: 'conventional',
-    conversionStartedRound: null,
-    land: freshLand(),
-    harvest: null,
-    growingHarvest: null,
-    contracts: [],
-    metrics: { affordableLocalSales: 0, touristSales: 0, organicUnitsSold: 0, contractsSigned: 0, contractsFulfilled: 0, totalSpoilage: 0 },
-  }))
-  const shockTypes = shuffle(ROUND2_CONFIG.shockDeck, random).slice(0, 2)
-  const shockRounds = shuffle([2, 3, 4, 5], random).slice(0, 2)
-  const floodIndex = shockTypes.indexOf('flood')
-  if (floodIndex >= 0 && shockRounds[floodIndex] === 5) {
-    const otherIndex = 1 - floodIndex
-    ;[shockRounds[floodIndex], shockRounds[otherIndex]] = [shockRounds[otherIndex], shockRounds[floodIndex]]
+export function advanceCouncil(state: GameState): GameState {
+  const next = clone(state)
+  if (next.phase !== 'council') return next
+  const p = next.council.plan
+  if (!['none', 'prePosition', 'procurement', 'extraTrucks', 'automatic'].includes(p.policy)) throw new Error('Unknown Council action.')
+  quantity(p.quantity); quantity(p.reserveRelease)
+  if (p.quantity > C.policyMaxUnits || p.reserveRelease > next.reserve) throw new Error('Council quantity exceeds available stock or policy limit.')
+  if (p.policy === 'procurement' && !next.players.some((farmer) => farmer.id === p.farmerId)) throw new Error('Choose a farmer for emergency buying.')
+  const cost = p.policy === 'extraTrucks' ? C.extraTruckCost : p.policy === 'procurement' ? p.quantity * C.procurementPrice : p.policy === 'prePosition' ? p.quantity * C.prePositionPrice : 0
+  if (cost > next.council.budget) throw new Error('The Council cannot afford this action.')
+  next.phase = 'planning'
+  if (next.ready.length === next.players.length) {
+    next.plans = Object.fromEntries(next.players.map((farmer) => [farmer.id, allocateDecision(next, farmer.id, next.decisions[farmer.id])]))
+    return resolveCurrentRound(next)
   }
-  const shocksByRound: GameState['shocksByRound'] = Object.fromEntries(Array.from({ length: ROUND2_CONFIG.rounds }, (_, index) => [index + 1, null]))
-  shockTypes.forEach((shock, index) => { shocksByRound[shockRounds[index]] = shock })
-  const riskSignals: GameState['riskSignals'] = Object.fromEntries(Array.from({ length: ROUND2_CONFIG.rounds }, (_, index) => {
-    const round = index + 1
-    const shock = shocksByRound[round]
-    if (round === 1) return [round, null]
-    if (shock) return [round, random() < ROUND2_CONFIG.forecastHitChance ? shock : null]
-    return [round, random() < ROUND2_CONFIG.forecastFalseAlarmChance ? shuffle(ROUND2_CONFIG.shockDeck, random)[0] : null]
-  }))
-  return {
-    round: 1,
-    phase: 'planning',
-    players,
-    plans: Object.fromEntries(players.map((player) => [player.id, emptyPlan(player)])),
-    activePlayerIndex: 0,
-    votePlayerIds: [],
-    votes: {},
-    demandDeck: shuffle(ROUND2_DEMAND_DECK, random),
-    shocksByRound,
-    riskSignals,
-    resolution: null,
-  }
+  next.plans = Object.fromEntries(next.players.map((farmer) => [farmer.id, defaultPlan(next, farmer)]))
+  return next
 }
-
+export function validatePlan(state: GameState, playerId: string, plan: TurnPlan): void {
+  const player = state.players.find((farmer) => farmer.id === playerId)
+  if (!player) throw new Error('Unknown farmer.')
+  Object.values(plan).forEach(quantity)
+  if (plan.contractQuantity > C.maxContractUnits || (state.round === C.rounds && plan.contractQuantity > 0)) throw new Error('Contract limit exceeded or no next round remains. Switch off the promise toggle.')
+  if (q(plan.marketUnits + plan.hubUnits + plan.storeUnits) > availableHarvest(state, player)) throw new Error(`You sent ${q(plan.marketUnits + plan.hubUnits + plan.storeUnits)} units but have ${availableHarvest(state, player)} harvest units. Remove ${q(plan.marketUnits + plan.hubUnits + plan.storeUnits - availableHarvest(state, player))}.`)
+  if (plan.warehouseRelease > warehouseUnits(state, player.id)) throw new Error('You cannot release more than your stored food.')
+  const reserved = state.ready.reduce((sum, id) => sum + (id !== player.id ? state.plans[id].reserveRelease : 0), state.council.plan.reserveRelease)
+  if (q(reserved + plan.reserveRelease) > state.reserve) throw new Error('Mae Tha reserve is already allocated.')
+  const moved = Math.min(player.harvest, contractsDue(state, player), transportCapacity(state)) + procurementReserved(state, player) + plan.marketUnits + plan.hubUnits + plan.storeUnits + plan.warehouseRelease + plan.reserveRelease
+  if (q(moved) > transportCapacity(state)) throw new Error(`Your routes exceed transport capacity by ${q(moved - transportCapacity(state))}. Remove that amount or ask the Council for trucks.`)
+}
 export function updatePlan(state: GameState, playerId: string, patch: Partial<TurnPlan>): GameState {
   const next = clone(state)
-  if (next.phase !== 'planning' || next.players[next.activePlayerIndex].id !== playerId) return next
-  const player = next.players.find((entry) => entry.id === playerId)!
-  const updated = { ...next.plans[playerId], ...patch }
-  if (player.coop || updated.joinCoop || !player.harvest) updated.saleTier = null
-  if (player.farmStatus !== 'conventional' || updated.joinCoop) updated.startConversion = false
-  const forecast = forecastHarvest(player, updated, next.round)
-  if (!(player.coop || updated.joinCoop) || !forecast) updated.contractQuantity = null
-  else if (updated.contractQuantity && updated.contractQuantity > forecast.units) updated.contractQuantity = forecast.units
-  next.plans[playerId] = updated
+  if (next.phase !== 'planning' || next.ready.includes(playerId) || !next.players.some((p) => p.id === playerId)) return next
+  next.plans[playerId] = { ...next.plans[playerId], ...patch }
   return next
 }
-
-export function advancePlanning(state: GameState): GameState {
+// One submit, no confirming/lock pass. Any phone can submit; activePlayerIndex serves pass-and-play only.
+export function advancePlanning(state: GameState, playerId = state.players[state.activePlayerIndex]?.id): GameState {
   const next = clone(state)
+  if (next.phase !== 'planning' || next.ready.includes(playerId)) return next
+  validatePlan(next, playerId, next.plans[playerId])
+  next.ready.push(playerId)
+  if (next.ready.length === next.players.length) return resolveCurrentRound(next)
+  next.activePlayerIndex = next.players.findIndex((p) => !next.ready.includes(p.id))
+  return next
+}
+export function finishPlanning(state: GameState): GameState {
+  let next = clone(state)
   if (next.phase !== 'planning') return next
-  const player = next.players[next.activePlayerIndex]
-  validatePlan(player, next.plans[player.id], next.round)
-  if (next.activePlayerIndex < next.players.length - 1) {
-    next.activePlayerIndex += 1
-    return next
+  for (const player of next.players) if (!next.ready.includes(player.id)) {
+    // Only host-accepted drafts count at timeout. Untouched farms use the visible market default.
+    const draft = next.plans[player.id]
+    try { validatePlan(next, player.id, draft) } catch { next.plans[player.id] = defaultPlan(next, player) }
+    next = advancePlanning(next, player.id)
   }
-  applyPlans(next)
-  next.votePlayerIds = next.players.filter((entry) => entry.coop).map((entry) => entry.id)
-  next.votes = Object.fromEntries(next.votePlayerIds.map((id) => [id, 'standard']))
-  next.activePlayerIndex = 0
-  next.phase = next.votePlayerIds.length ? 'voting' : 'resolution'
-  return next.votePlayerIds.length ? next : resolveCurrentRound(next)
-}
-
-function validatePlan(player: Player, plan: TurnPlan, round: number): void {
-  if (player.harvest && !player.coop && !plan.joinCoop && !plan.saleTier) throw new Error(`${player.name} must price their available harvest.`)
-  if (plan.shockFund && (round === 1 || player.cash < ROUND2_CONFIG.shockFundCost)) throw new Error(`${player.name} cannot buy shock cover this round.`)
-  if (plan.contractQuantity !== null) {
-    if (!(player.coop || plan.joinCoop)) throw new Error('Only co-op members may sign an institutional contract.')
-    if (round >= ROUND2_CONFIG.rounds) throw new Error('No new contracts can be due after the final round.')
-    const forecast = forecastHarvest(player, plan, round)
-    if (!forecast || plan.contractQuantity < 1 || plan.contractQuantity > forecast.units) throw new Error('Contract quantity must be within this round’s forecast harvest.')
-  }
-}
-
-function transitionOrganicStatus(player: Player, round: number): void {
-  if (player.farmStatus === 'converting' && player.conversionStartedRound !== null && round >= player.conversionStartedRound + 1) {
-    player.farmStatus = 'organic'
-    player.conversionStartedRound = null
-  }
-}
-
-function applyPlans(next: GameState): void {
-  for (const player of next.players) {
-    const plan = next.plans[player.id]
-    validatePlan(player, plan, next.round)
-    if (plan.joinCoop && !player.coop) {
-      player.coop = true
-      if (player.farmStatus === 'conventional') { player.farmStatus = 'converting'; player.conversionStartedRound = next.round }
-    } else if (plan.startConversion && player.farmStatus === 'conventional') {
-      player.farmStatus = 'converting'
-      player.conversionStartedRound = next.round
-    }
-    if (plan.contractQuantity !== null) {
-      const contract: Contract = { id: `${player.id}-r${next.round}`, quantity: plan.contractQuantity, dueRound: next.round + 1, pricePerUnit: ROUND2_CONFIG.contractPrice, signedRound: next.round }
-      player.contracts.push(contract)
-      player.metrics.contractsSigned += 1
-    }
-    player.growingHarvest = forecastHarvest(player, plan, next.round)
-    player.land = previewLandPlots(player, plan)
-  }
-}
-
-export function updateVote(state: GameState, playerId: string, tier: Tier): GameState {
-  const next = clone(state)
-  if (next.phase === 'voting' && next.votePlayerIds[next.activePlayerIndex] === playerId) next.votes[playerId] = tier
   return next
 }
-
-export function winningCoopTier(state: GameState): Tier {
-  const counts = emptyTiers()
-  Object.values(state.votes).forEach((tier) => { counts[tier] += 1 })
-  const max = Math.max(...TIERS.map((tier) => counts[tier]))
-  const winners = TIERS.filter((tier) => counts[tier] === max)
-  return winners.length === 1 ? winners[0] : 'standard'
-}
-
-export function advanceVoting(state: GameState): GameState {
-  const next = clone(state)
-  if (next.phase !== 'voting') return next
-  if (next.activePlayerIndex < next.votePlayerIds.length - 1) { next.activePlayerIndex += 1; return next }
-  return resolveCurrentRound(next)
-}
-
-export const combinedDemand = (demand: SourceDemand): TierValues => TIERS.reduce((total, tier) => {
-  total[tier] = SOURCES.reduce((sum, source) => sum + demand[source][tier], 0)
-  return total
-}, emptyTiers())
-
-function effectiveDemand(demand: SourceDemand, shock: ShockType | null): SourceDemand {
-  const next = clone(demand)
-  if (shock === 'tourismCollapse') next.tourist = emptyTiers()
-  return next
-}
-
-interface Offer { player: Player; units: number; tier: Tier }
-
-function allocateSourceUnits(amount: number, tier: Tier, remaining: SourceDemand): Record<Source, number> {
-  const allocated: Record<Source, number> = { local: 0, tourist: 0 }
-  let left = amount
-  for (let index = tierRank(tier); index < TIERS.length && left > 0.0001; index += 1) {
-    const willingness = TIERS[index]
-    for (const source of SOURCES) {
-      const used = Math.min(left, remaining[source][willingness])
-      remaining[source][willingness] = round2(remaining[source][willingness] - used)
-      allocated[source] = round2(allocated[source] + used)
-      left = round2(left - used)
-      if (left <= 0.0001) break
-    }
-  }
-  return allocated
-}
-
-function equalSplit(offers: Offer[], amount: number): Map<string, number> {
-  const result = new Map<string, number>()
-  let available = [...offers]
-  let left = amount
-  while (available.length && left > 0.0001) {
-    const share = left / available.length
-    let used = 0
-    const remaining: Offer[] = []
-    for (const offer of available) {
-      const sale = Math.min(share, offer.units)
-      offer.units = round2(offer.units - sale)
-      result.set(offer.player.id, round2((result.get(offer.player.id) ?? 0) + sale))
-      used += sale
-      if (offer.units > 0.0001) remaining.push(offer)
-    }
-    left = round2(left - used)
-    available = remaining
-  }
-  return result
-}
-
-function resolveMarket(mode: Mode, demand: SourceDemand, offers: Offer[], lines: Record<string, ResolutionLine>): MarketSnapshot {
-  const remainingDemand = clone(demand)
-  const supplyByTier = emptyTiers()
-  const soldByTier = emptyTiers()
-  offers.forEach((offer) => { supplyByTier[offer.tier] += offer.units })
-  for (const tier of TIERS) {
-    const sameTier = offers.filter((offer) => offer.tier === tier && offer.units > 0)
-    const eligibleDemand = TIERS.slice(tierRank(tier)).reduce((sum, willingness) => sum + SOURCES.reduce((sourceSum, source) => sourceSum + remainingDemand[source][willingness], 0), 0)
-    const sold = Math.min(eligibleDemand, sameTier.reduce((sum, offer) => sum + offer.units, 0))
-    if (sold <= 0) continue
-    const byPlayer = equalSplit(sameTier, sold)
-    const sources = allocateSourceUnits(sold, tier, remainingDemand)
-    soldByTier[tier] = round2(sold)
-    const totalSold = [...byPlayer.values()].reduce((sum, value) => sum + value, 0)
-    for (const [playerId, units] of byPlayer) {
-      const proportion = totalSold ? units / totalSold : 0
-      const local = round2(sources.local * proportion)
-      const tourist = round2(sources.tourist * proportion)
-      lines[playerId].localUnits += local
-      lines[playerId].touristUnits += tourist
-      if (tier === 'affordable') lines[playerId].affordableLocalUnits += local
-      if (mode === 'organic') lines[playerId].organicUnitsSold += units
-      lines[playerId].marketUnits += units
-      lines[playerId].revenue += units * ROUND2_CONFIG.prices[mode][tier]
-    }
-  }
-  return { mode, demand, supplyByTier, soldByTier }
-}
-
-function applyFlood(next: GameState, impact: CrisisImpact): void {
-  for (const player of next.players) {
-    if (!player.growingHarvest || player.growingHarvest.plantedRound !== next.round) continue
-    const lost = Math.round(player.growingHarvest.units * ROUND2_CONFIG.floodLossFraction)
-    player.growingHarvest.units = Math.max(0, player.growingHarvest.units - lost)
-    let left = lost
-    player.land = player.land.map((plot) => {
-      if (left > 0 && (plot.state === 'growing-conventional' || plot.state === 'growing-organic')) { left -= 1; return { ...plot, state: 'crisis-affected' } }
-      return plot
-    })
-    impact.playerImpacts.push({ playerId: player.id, growingCropsLost: lost, openMarketBlocked: 0 })
-  }
-}
-
-const initialLine = (player: Player): ResolutionLine => ({ playerId: player.id, harvestMode: player.harvest?.mode ?? null, saleInventoryUnits: player.harvest?.units ?? 0, contractUnits: 0, contractShortfall: 0, localUnits: 0, touristUnits: 0, affordableLocalUnits: 0, organicUnitsSold: 0, marketUnits: 0, spoilage: 0, revenue: 0, costs: 0, fundCost: 0, fundPayout: 0 })
-
 export function resolveCurrentRound(state: GameState): GameState {
-  const next = clone(state)
-  const saleRound = next.round >= 2
-  const shock = next.shocksByRound[next.round] ?? null
-  const demandCard = saleRound ? next.demandDeck[next.round - 2] : null
-  const lines = Object.fromEntries(next.players.map((player) => [player.id, initialLine(player)])) as Record<string, ResolutionLine>
-  const impact: CrisisImpact | null = shock ? { shock, headline: '', playerImpacts: [], touristDemandRemoved: 0 } : null
-  if (shock === 'flood' && impact) {
-    applyFlood(next, impact)
-    impact.headline = 'Flood reduced crops that are currently growing for the next sale round.'
+  if (state.phase !== 'planning' || state.resolution) return clone(state)
+  const next = state.council.seat === 'automatic' ? automaticCouncil(state) : clone(state)
+  const event = currentEvent(next)
+  const capacity = transportCapacity(next)
+  const before = next.citySecurity
+  const budgetBefore = next.council.budget
+  const policy = next.council.plan
+  const reserveHold = policy.policy === 'automatic' ? policy.reserveRelease * C.procurementPrice : 0
+  const prePositionHold = policy.policy === 'prePosition' ? Math.min(policy.quantity, next.players.reduce((sum, p) => sum + next.plans[p.id].storeUnits, 0)) * C.prePositionPrice : 0
+  const left = Object.fromEntries(next.players.map((p) => [p.id, capacity]))
+  const food = Object.fromEntries(next.players.map((p) => [p.id, p.harvest]))
+  const lines = Object.fromEntries(next.players.map((p): [string, ResolutionLine] => [p.id, { playerId: p.id, harvest: p.harvest, contractUnits: 0, contractShortfall: 0, marketUnits: 0, hubUnits: 0, warehouseReleased: 0, reserveReleased: 0, stored: 0, spoilage: 0, decay: 0, storageCost: 0, revenue: 0, transportUsed: 0, transportCapacity: capacity }]))
+  const spend = (amount: number) => { const paid = q(Math.min(amount, next.council.budget)); next.council.budget = q(next.council.budget - paid); next.council.spent = q(next.council.spent + paid); return paid }
+  const move = (id: string, amount: number) => { left[id] = q(left[id] - amount) }
+  if (policy.policy === 'extraTrucks') spend(C.extraTruckCost)
+  for (const p of next.players) {
+    const due = contractsDue(next, p)
+    const attempted = q(Math.min(due, food[p.id], left[p.id]))
+    const sent = contractArrivals(next, p)
+    // The promised consignment uses transport even when disrupted food fails to arrive.
+    lines[p.id].spoilage = q(attempted - sent)
+    lines[p.id].contractUnits = sent; lines[p.id].contractShortfall = q(due - sent)
+    lines[p.id].revenue += sent * C.contractPrice
+    food[p.id] = q(food[p.id] - attempted); move(p.id, attempted)
+    p.contracts = p.contracts.filter((c) => c.dueRound !== next.round)
+    if (next.plans[p.id].contractQuantity) p.contracts.push({ quantity: next.plans[p.id].contractQuantity, dueRound: next.round + 1 })
   }
-  const markets: MarketSnapshot[] = []
-
-  if (saleRound && demandCard) {
-    for (const player of next.players) {
-      const due = player.contracts.filter((contract) => contract.dueRound === next.round)
-      for (const contract of due) {
-        const harvestMode = player.harvest?.mode
-        const delivered = Math.min(contract.quantity, player.harvest?.units ?? 0)
-        if (player.harvest) player.harvest.units = round2(player.harvest.units - delivered)
-        const shortfall = round2(contract.quantity - delivered)
-        lines[player.id].contractUnits += delivered
-        lines[player.id].contractShortfall += shortfall
-        if (harvestMode === 'organic') lines[player.id].organicUnitsSold += delivered
-        lines[player.id].revenue += delivered * contract.pricePerUnit - (shortfall ? ROUND2_CONFIG.contractShortfallPenalty : 0)
-        if (!shortfall) player.metrics.contractsFulfilled += 1
-      }
-      player.contracts = player.contracts.filter((contract) => contract.dueRound !== next.round)
+  if (policy.policy === 'procurement') {
+    const id = policy.farmerId
+    const bought = q(Math.min(policy.quantity, food[id], left[id], affordable(next.council.budget, C.procurementPrice)))
+    lines[id].hubUnits += bought; lines[id].revenue += spend(bought * C.procurementPrice)
+    food[id] = q(food[id] - bought); move(id, bought)
+  }
+  for (const p of next.players) {
+    const plan = next.plans[p.id], line = lines[p.id]
+    const reserve = q(Math.min(plan.reserveRelease, next.reserve, left[p.id]))
+    next.reserve = q(next.reserve - reserve); line.reserveReleased = reserve; line.hubUnits += reserve; move(p.id, reserve)
+    let release = q(Math.min(plan.warehouseRelease, left[p.id], affordable(Math.max(0, next.council.budget - prePositionHold - reserveHold), C.hubPrice)))
+    for (const lot of next.warehouse.filter((lot) => lot.ownerId === p.id)) {
+      const sent = q(Math.min(lot.units, release)); lot.units = q(lot.units - sent); release = q(release - sent)
+      line.warehouseReleased += sent; line.hubUnits += sent; line.revenue += spend(sent * C.hubPrice); move(p.id, sent)
     }
-    if (shock !== 'marketClosure') {
-      for (const mode of ['conventional', 'organic'] as Mode[]) {
-        const demand = effectiveDemand(demandCard.demand[mode], shock)
-        if (shock === 'tourismCollapse' && impact && mode === 'organic') impact.touristDemandRemoved = combinedDemand(demandCard.demand.organic).standard - combinedDemand(demand).standard + combinedDemand(demandCard.demand.organic).premium - combinedDemand(demand).premium
-        const offers: Offer[] = next.players.flatMap((player) => {
-          if (!player.harvest || player.harvest.mode !== mode || player.harvest.units <= 0) return []
-          const tier = player.coop ? winningCoopTier(next) : next.plans[player.id].saleTier
-          return tier ? [{ player, units: player.harvest.units, tier }] : []
-        })
-        const snapshot = resolveMarket(mode, demand, offers, lines)
-        markets.push(snapshot)
-        for (const offer of offers) {
-          const player = next.players.find((entry) => entry.id === offer.player.id)!
-          if (player.harvest) player.harvest.units = offer.units
-        }
-      }
-      if (shock === 'tourismCollapse' && impact) impact.headline = `Tourism collapse removed ${impact.touristDemandRemoved} Tourist demand units from the organic market.`
-    } else if (impact) {
-      for (const player of next.players) {
-        const blocked = player.harvest?.units ?? 0
-        if (blocked) impact.playerImpacts.push({ playerId: player.id, growingCropsLost: 0, openMarketBlocked: blocked })
-      }
-      impact.headline = 'Market closure prevented all open-market sales; only institutional contracts could be fulfilled.'
-    }
-    for (const player of next.players) {
-      const spoilage = player.harvest?.units ?? 0
-      lines[player.id].spoilage = spoilage
-      player.metrics.totalSpoilage = round2(player.metrics.totalSpoilage + spoilage)
-      player.harvest = null
-      player.metrics.affordableLocalSales = round2(player.metrics.affordableLocalSales + lines[player.id].affordableLocalUnits)
-      player.metrics.touristSales = round2(player.metrics.touristSales + lines[player.id].touristUnits)
-      player.metrics.organicUnitsSold = round2(player.metrics.organicUnitsSold + lines[player.id].organicUnitsSold)
-    }
+    const hub = q(Math.min(plan.hubUnits, food[p.id], left[p.id], affordable(Math.max(0, next.council.budget - prePositionHold - reserveHold), C.hubPrice)))
+    line.hubUnits += hub; line.revenue += spend(hub * C.hubPrice); food[p.id] = q(food[p.id] - hub); move(p.id, hub)
   }
-  for (const player of next.players) {
-    lines[player.id].costs = farmOperatingCost(player)
-    lines[player.id].fundCost = next.plans[player.id].shockFund ? ROUND2_CONFIG.shockFundCost : 0
-    lines[player.id].fundPayout = shock && next.plans[player.id].shockFund ? ROUND2_CONFIG.shockFundPayout : 0
-    player.cash = round2(player.cash + lines[player.id].revenue - lines[player.id].costs - lines[player.id].fundCost + lines[player.id].fundPayout)
-    lines[player.id].revenue = round2(lines[player.id].revenue)
+  // Equal-price market offers share scarce demand in hundredths, with a rotating remainder priority.
+  const offers = next.players.map((p) => ({ id: p.id, units: Math.round(Math.min(next.plans[p.id].marketUnits, food[p.id], left[p.id]) * C.quantityPrecision) }))
+  let marketLeft = Math.round(event.capacity * C.quantityPrecision)
+  const ordered = [...offers.slice((next.round - 1) % offers.length), ...offers.slice(0, (next.round - 1) % offers.length)]
+  while (marketLeft > 0 && ordered.some((offer) => offer.units > 0)) {
+    for (const offer of ordered) if (offer.units > 0 && marketLeft > 0) { offer.units--; marketLeft--; lines[offer.id].marketUnits = q(lines[offer.id].marketUnits + 1 / C.quantityPrecision) }
   }
-  next.phase = 'resolution'
-  next.resolution = {
-    round: next.round,
-    demand: demandCard,
-    shock,
-    crisisImpact: impact,
-    markets,
-    lines: next.players.map((player) => lines[player.id]),
-    note: !saleRound ? 'Round 1 prepares the first harvest. There is no inventory to price or sell yet.' : shock === 'marketClosure' ? 'Market closure: only due institutional contracts could sell this round.' : 'Demand was revealed after every farmer finished planning. Lower-priced offers served eligible buyers first.',
+  let support = policy.policy === 'prePosition' ? policy.quantity : 0
+  for (const p of next.players) {
+    const plan = next.plans[p.id], line = lines[p.id]
+    food[p.id] = q(food[p.id] - line.marketUnits); move(p.id, line.marketUnits); line.revenue += line.marketUnits * event.price
+    const stored = q(Math.min(plan.storeUnits, food[p.id], left[p.id]))
+    if (stored) next.warehouse.push({ ownerId: p.id, units: stored, depositedRound: next.round })
+    line.stored = stored; food[p.id] = q(food[p.id] - stored); move(p.id, stored)
+    const supported = Math.min(support, stored, affordable(next.council.budget, C.prePositionPrice))
+    line.revenue += spend(supported * C.prePositionPrice); support = q(support - supported)
   }
+  let councilReserveReleased = 0
+  let reserveWanted = Math.min(policy.reserveRelease, next.reserve)
+  for (const p of next.players) {
+    const sent = q(Math.min(reserveWanted, left[p.id])); reserveWanted = q(reserveWanted - sent); next.reserve = q(next.reserve - sent); move(p.id, sent); councilReserveReleased = q(councilReserveReleased + sent)
+  }
+  if (policy.policy === 'automatic') {
+    spend(councilReserveReleased * C.procurementPrice)
+    next.council.explanation = `Bought ${councilReserveReleased} reserve units because planned food fell short${isCrisis(next) ? '; funded hub deliveries during the crisis' : '; kept the rest of the budget for disruptions'}.`
+  }
+  // Donated reserve is separate: never decays, never incurs farmer fees, never pays farmer cash.
+  for (const lot of next.warehouse) lines[lot.ownerId].storageCost += lot.units * C.warehouseCostPerUnit
+  let decay = Math.floor(warehouseUnits(next) * C.warehouseDecayFraction)
+  for (const lot of next.warehouse) { const lost = Math.min(lot.units, decay); lot.units = q(lot.units - lost); decay = q(decay - lost); lines[lot.ownerId].decay = q(lines[lot.ownerId].decay + lost) }
+  next.warehouse = next.warehouse.filter((lot) => lot.units > 0)
+  for (const p of next.players) {
+    const line = lines[p.id]; line.spoilage = q(line.spoilage + food[p.id]); line.transportUsed = q(capacity - left[p.id]); line.storageCost = q(line.storageCost); line.revenue = q(line.revenue)
+    p.cash = q(p.cash + line.revenue - line.storageCost); p.waste = q(p.waste + line.spoilage + line.decay); next.totalWaste = q(next.totalWaste + line.spoilage + line.decay)
+    if (isCrisis(next)) next.crisisWarehouseUnits = q(next.crisisWarehouseUnits + line.warehouseReleased + line.reserveReleased)
+  }
+  if (isCrisis(next)) next.crisisWarehouseUnits = q(next.crisisWarehouseUnits + councilReserveReleased)
+  const contractsDelivered = q(Object.values(lines).reduce((s, line) => s + line.contractUnits, 0))
+  const hubDelivered = q(Object.values(lines).reduce((s, line) => s + line.hubUnits, councilReserveReleased))
+  const cityNeed = isCrisis(next) ? next.rules.cityCrisisNeed : next.rules.cityNeed
+  const baseGap = Math.max(0, next.rules.cityNeed - Math.min(next.rules.cityNeed, contractsDelivered))
+  const crisisHubNeed = cityNeed - next.rules.cityNeed
+  const crisisHubShortfall = q(Math.max(0, crisisHubNeed - Math.max(0, hubDelivered - baseGap)))
+  const shortfall = q(Math.max(0, baseGap - hubDelivered) + crisisHubShortfall)
+  next.citySecurity = q(Math.max(0, Math.min(next.rules.cityMaxSecurity, before + (shortfall ? -shortfall * C.cityLossPerShortUnit : C.cityRecovery))))
+  next.totalHubUnits = q(next.totalHubUnits + hubDelivered); next.totalContractsDelivered = q(next.totalContractsDelivered + contractsDelivered)
+  next.resolution = { round: next.round, event: clone(event), lines: next.players.map((p) => lines[p.id]), councilReserveReleased, contractsDelivered, hubDelivered, cityDelivered: q(contractsDelivered + hubDelivered), cityNeed, crisisHubNeed, crisisHubShortfall, shortfall, securityBefore: before, securityAfter: next.citySecurity, councilSpent: q(budgetBefore - next.council.budget), waste: q(Object.values(lines).reduce((s, line) => s + line.spoilage + line.decay, 0)) }
+  if (policy.policy === 'automatic') next.council.explanation = councilReserveReleased > 0 ? `Bought ${councilReserveReleased} reserve units because planned food fell short; ${isCrisis(next) ? 'funded the crisis hub with the remaining budget' : 'kept the rest for later'}.` : shortfall > 0 ? 'Need remains unmet: the remaining reserve, roads or budget could not cover the gap.' : `Planned food met need; kept the reserve${isCrisis(next) ? ' and funded crisis hub deliveries' : ' for later'}.`
+  next.history.push(clone(next.resolution))
+  next.phase = next.citySecurity === 0 ? 'gameOver' : 'resolution'
   return next
 }
-
 export function advanceRound(state: GameState): GameState {
   const next = clone(state)
   if (next.phase !== 'resolution') return next
-  if (next.round === ROUND2_CONFIG.rounds) { next.phase = 'debrief'; return next }
-  next.round += 1
-  next.players.forEach((player) => {
-    transitionOrganicStatus(player, next.round)
-    player.harvest = player.growingHarvest
-    player.growingHarvest = null
-    player.land = freshLand()
-  })
-  next.phase = 'planning'
-  next.activePlayerIndex = 0
-  next.plans = Object.fromEntries(next.players.map((player) => [player.id, emptyPlan(player)]))
-  next.votePlayerIds = []
-  next.votes = {}
-  next.resolution = null
+  if (next.round === C.rounds) { next.phase = 'debrief'; return next }
+  const harvest = nextHarvest(next)
+  next.round++; next.phase = 'council'; next.ready = []; next.activePlayerIndex = 0; next.resolution = null
+  next.players.forEach((p) => { p.harvest = harvest })
+  next.council.plan = emptyCouncilPlan(next.players[0].id)
+  next.council.explanation = ''
+  next.plans = Object.fromEntries(next.players.map((p) => [p.id, defaultPlan(next, p)]))
+  next.decisions = Object.fromEntries(next.players.map((p) => [p.id, { card: 'sell', promise: false }]))
+  return next
+}
+export function rankPlayers(state: GameState): PlayerScore[] {
+  if (state.phase !== 'debrief' || state.endedEarly) return []
+  const scores = state.players.map((p) => ({ playerId: p.id, name: p.name, cash: p.cash, goal: p.goal, won: personalGoalPassed(state, p), rank: 0 })).sort((a, b) => b.cash - a.cash)
+  scores.forEach((score, i) => { score.rank = i > 0 && score.cash === scores[i - 1].cash ? scores[i - 1].rank : i + 1 })
+  return scores
+}
+
+export function automaticCouncil(state: GameState): GameState {
+  const next = clone(state)
+  const contracts = next.players.reduce((sum, p) => sum + contractArrivals(next, p), 0)
+  const offers = next.players.reduce((sum, p) => sum + next.plans[p.id].hubUnits + next.plans[p.id].warehouseRelease, 0)
+  const expected = contracts + Math.min(offers, affordable(next.council.budget, C.hubPrice))
+  const need = isCrisis(next) ? next.rules.cityCrisisNeed : next.rules.cityNeed
+  next.council.plan = { policy: 'automatic', quantity: 0, farmerId: next.players[0].id, reserveRelease: Math.min(next.reserve, Math.max(0, need - expected), affordable(next.council.budget, C.procurementPrice)) }
   return next
 }
 
-export const phaseLabel = (phase: GameState['phase']): string => ({ planning: 'Planning', voting: 'Co-op vote', resolution: 'Market resolution', debrief: 'Debrief' })[phase]
+export function allocateDecision(state: GameState, playerId: string, choice: Decision): TurnPlan {
+  const p = state.players.find((farmer) => farmer.id === playerId)
+  if (!p) throw new Error('Choose your farm seat before submitting.')
+  if (!['sell', 'share', 'store', 'release'].includes(choice.card) || typeof choice.promise !== 'boolean') throw new Error('Tap one plan card and choose whether to promise a contract.')
+  if (choice.card === 'release' && warehouseUnits(state, playerId) === 0) throw new Error('You have no stored food. Choose Sell, Share or Store.')
+  const free = availableHarvest(state, p)
+  let left = Math.max(0, transportCapacity(state) - Math.min(p.harvest, contractsDue(state, p), transportCapacity(state)) - procurementReserved(state, p))
+  const plan: TurnPlan = { marketUnits: 0, hubUnits: 0, storeUnits: 0, warehouseRelease: 0, reserveRelease: 0, contractQuantity: choice.promise && state.round < C.rounds ? C.maxContractUnits : 0 }
+  if (choice.card === 'share') { plan.hubUnits = Math.min(Math.ceil(free / C.shareDivisor), left); left -= plan.hubUnits; plan.marketUnits = Math.min(Math.max(0, free - plan.hubUnits), left) }
+  if (choice.card === 'store') plan.storeUnits = Math.min(free, left)
+  if (choice.card === 'sell') plan.marketUnits = Math.min(free, left)
+  if (choice.card === 'release') { plan.warehouseRelease = Math.min(warehouseUnits(state, p.id), left); left -= plan.warehouseRelease; plan.marketUnits = Math.min(free, left) }
+  return Object.fromEntries(Object.entries(plan).map(([key, value]) => [key, q(value)])) as unknown as TurnPlan
+}
+export function updateDecision(state: GameState, playerId: string, choice: Decision): GameState {
+  const next = clone(state)
+  if (next.phase !== 'planning') return next
+  const plan = allocateDecision(next, playerId, choice)
+  validatePlan(next, playerId, plan)
+  next.decisions[playerId] = clone(choice); next.plans[playerId] = plan
+  return next
+}
+export function previewDecision(state: GameState, playerId: string, choice: Decision): DecisionPreview {
+  const plan = allocateDecision(state, playerId, choice)
+  const p = state.players.find((p) => p.id === playerId)!
+  const contract = contractArrivals(state, p)
+  const attemptedContract = Math.min(p.harvest, contractsDue(state, p), transportCapacity(state))
+  const stockLeft = Math.max(0, warehouseUnits(state, p.id) - plan.warehouseRelease) + plan.storeUnits
+  const costs = stockLeft * C.warehouseCostPerUnit
+  const paidHub = Math.min(plan.hubUnits + plan.warehouseRelease, affordable(state.council.budget, C.hubPrice))
+  const moves = q(attemptedContract + plan.marketUnits + plan.hubUnits + plan.storeUnits + plan.warehouseRelease)
+  return { cashMin: q(contract * C.contractPrice - costs), cashMax: q(contract * C.contractPrice + plan.marketUnits * currentEvent(state).price + paidHub * C.hubPrice - costs), households: q(contract + paidHub), moves, stored: plan.storeUnits, limited: plan.marketUnits + plan.hubUnits + plan.storeUnits < availableHarvest(state, p) || (choice.card === 'release' && plan.warehouseRelease < warehouseUnits(state, p.id)) }
+}
+export function finishDecisions(state: GameState): GameState {
+  const next = clone(state)
+  if (next.phase !== 'planning') return next
+  for (const p of next.players) next.plans[p.id] = allocateDecision(next, p.id, next.decisions[p.id])
+  next.ready = next.players.map((p) => p.id)
+  if (next.council.seat === 'player') { next.phase = 'council'; return next }
+  return resolveCurrentRound(next)
+}
+
+export const personalGoalPassed = (state: GameState, player: Player): boolean => state.phase === 'debrief' && !state.endedEarly && state.citySecurity > 0 && player.cash >= player.goal
