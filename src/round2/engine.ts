@@ -271,3 +271,12 @@ export function finishDecisions(state: GameState): GameState {
 }
 
 export const personalGoalPassed = (state: GameState, player: Player): boolean => state.phase === 'debrief' && !state.endedEarly && state.citySecurity > 0 && player.cash >= player.goal
+
+export function applyPestLoss(state: GameState, playerId: string, destroyed: number): GameState {
+  if (!Number.isInteger(destroyed) || destroyed < 0 || destroyed > C.minigame.plants) throw new Error('Invalid crop loss.')
+  const next = clone(state), p = next.players.find(p => p.id === playerId)
+  if (!p || next.phase !== 'planning') throw new Error('Grow is closed.')
+  p.harvest = q(Math.max(0, p.harvest - Math.min(C.pestMaxLoss, destroyed * C.minigame.unitsPerPlant)))
+  next.plans[p.id] = defaultPlan(next, p)
+  return next
+}

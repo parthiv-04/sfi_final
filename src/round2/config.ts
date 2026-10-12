@@ -1,5 +1,11 @@
 export const ROUND2_CONFIG = {
   playerCount: 5,
+  pestMaxLoss: 1,
+  minigame: {
+    durationSec: 15, plants: 5, unitsPerPlant: 0.2, fieldWidthPx: 320, fieldHeightPx: 300, plantBandPx: 44,
+    spray: { spawnIntervalSec: 1.6, fallSpeedPx: 90, sprayRadiusPx: 70 },
+    hand: { spawnIntervalSec: 1, fallSpeedPx: 120, hitboxPx: 48 },
+  },
   minPlayers: 3,
   maxPlayers: 8,
   scaling: { cityNeed: 1, crisisNeed: 1.4, startingSecurity: 1.5, maximumSecurity: 2, reserve: 0.4, councilBudget: 6 },

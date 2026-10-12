@@ -1,3 +1,4 @@
+import { GrowFarm } from '../ui/GrowFarm'
 import { useEffect, useRef, useState } from 'react'
 import { randomId } from './ids'
 import { connectFirebase } from './firebase'
@@ -58,7 +59,7 @@ export default function PlayerView({ onBack }: { onBack: () => void }) {
       {room && view && !room.started && <section className="workspace"><h2>Pick a seat</h2><div className="seat-grid">{room.seats.map((seat) => <button key={seat.id} className="quiet seat-card" disabled={disabled || (seat.taken && view.participant.seatId !== seat.id)} onClick={() => void send('claimSeat', { seatId: seat.id })}><strong>{seat.id === 'council' ? 'Food Council' : `Farm ${seat.id.slice(1)}`}</strong><span>{seat.taken ? seat.name : 'Available'}</span></button>)}</div></section>}
       {room?.started && view?.participant.spectator && <p>Spectator: the game has started.</p>}
       {room && view && <PhoneBars room={room} view={view} />}
-      {room?.learning.kind && <SharedLearning room={room} disabled={disabled} onNext={() => void send('learningNext', { ...room.learning })} onSkip={() => void send('learningSkip', { ...room.learning })} />}
+      {room && view?.player && room.learning.kind === 'grow' && room.learning.index === 1 && <GrowFarm key={`${room.runId}-${room.round}-${view.player.id}`} view={view} room={room} disabled={disabled} onDone={destroyed=>void send('pest',{destroyed})} />}{room?.learning.kind && <SharedLearning room={room} disabled={disabled} onNext={() => void send('learningNext', { ...room.learning })} onSkip={() => void send('learningSkip', { ...room.learning })} />}
       {room && view?.player && room.discussionIndex < 0 && <section className="workspace own-farm"><h2>{view.player.name} · {money(view.player.cash)}</h2><p>Harvest: {units(view.player.harvest)} · your stored food: {units(view.ownStock)}</p>{view.canPlan ? <><PlanningTimer endsAt={room.planningEndsAt} /><PhoneFarm key={`${room.round}-${view.player.id}`} view={view} room={room} disabled={disabled} onSave={(choice) => void send('plan', { choice })} /></> : <p>{room.phase === 'council' ? 'Waiting for the Council action after everyone submits.' : 'Planning is complete.'}</p>}</section>}
       {room && view?.canCouncil && <section className="workspace"><h2>Food Council</h2><CouncilControls key={room.round} view={view} disabled={disabled} onSubmit={(plan) => void send('council', { plan })} /></section>}
       {room && (room.discussionIndex >= 0 ? <Discussion key={view?.participant.uid} room={room} answer={view?.reflection ?? ''} disabled={disabled} onAnswer={view?.player ? (answer) => void send('reflection', { answer }) : undefined} /> : <SharedBoard room={room} compact />)}

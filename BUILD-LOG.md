@@ -31,3 +31,6 @@ Ported sprite grids/SVG renderer, Stage/Backdrop/Pixel/Crate/Coin/CountUp and in
 
 ## 3 — Pixel reveal
 Adapted reference truck/crate, flood, closure and household animation patterns to the real Resolution type. Seven original two-second reveal steps and Skip retained, with exact small labels; reduced motion jumps to completion. Household display scales to crisis need at 8 farmers. `npm test`: 87 passed; `npm run build`: passed.
+
+## 4 — Pest Grow step
+Ported deterministic mini-game/rng with 15-second play, loss capped at 1 unit in config, room-code seed + round, concurrent phones and sequential offline turns. Added pre-game Skip pest game, host countdown, duplicate/invalid-result rejection and host timeout for missing phones. Chose no timed help overlay so all players share the 15-second window. `npm test`: 89 passed; `npm run build`: passed.

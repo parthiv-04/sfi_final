@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { applyAction, newRoom, projectRoom } from './hostModel'
+import { applyAction, newRoom as makeRoom, projectRoom } from './hostModel'
+const newRoom: typeof makeRoom = (...args) => ({ ...makeRoom(...args), skipPest: true })
 import { HostController, roomCode } from './controller'
 import { ROUND2_CONFIG as C } from '../round2/config'
 import { DEBRIEF_QUESTIONS } from '../learning'

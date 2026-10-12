@@ -1,3 +1,4 @@
+import { PlanningTimer } from './SharedBoard'
 import { useRef } from 'react'
 import { ALL_CARDS, CONTEXT_CARDS, EVENT_CARDS, ROUND_STEPS } from '../learning'
 import { ROUND2_CONFIG as C } from '../round2/config'
@@ -9,6 +10,7 @@ export function CardPanel({ card }: { card: InfoCard }) { return <><span classNa
 export function SharedLearning({ room, onNext, onSkip, disabled = false }: { room: PublicRoom; onNext: () => void; onSkip: () => void; disabled?: boolean }) {
   if (!room.learning.kind) return null
   const kind = room.learning.kind
+  if (kind === 'grow' && room.learning.index === 1) return <section className="workspace"><h2>Farmers are protecting their crops</h2><PlanningTimer endsAt={room.pestEndsAt} /><small>{room.pestDone.length}/{room.rules.playerCount} farms ready</small></section>
   const card = kind === 'context' ? CONTEXT_CARDS[room.learning.index] : kind === 'event' ? EVENT_CARDS[room.event?.kind ?? 'normal'] : null
   return <section className="workspace info-card" aria-live="polite">{kind === 'howto' ? <HowToPlay room={room} /> : card ? <CardPanel card={card} /> : <><span className="info-icon">🌱</span><h2>Harvest ready</h2><p>Every farm harvests {C.harvestPerFarm} units. Last round’s flood halves this harvest; this round’s roads limit what can move.</p></>}<div className="phone-actions"><button className="primary" disabled={disabled} onClick={onNext}>Next</button><button className="quiet" disabled={disabled} onClick={onSkip}>Skip</button></div></section>
 }
