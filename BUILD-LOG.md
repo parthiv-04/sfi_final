@@ -59,3 +59,6 @@ To satisfy the user's additional Share test together with the specified organic 
 | 8 | random | 68% | 60.5% | 28.38% | 25.25% |
 
 Coordinated has the most farmer goal-winners at all counts and the lowest city loss (tie at 3). Share+promise goal-winners stay below 50%. Tests cover debt carryover, closure rot, soil recovery, card restrictions, organic costs/cap and fractional harvest. `npm test`: 95 passed; `npm run build`: passed. Fact plumbing was integrated with role projection; fact selection validation follows in milestone 6.
+
+## 6 — Facts and debrief
+Merged all 12 reference facts with their supplied source lines (fieldwork/workshop attributions, not independently verified publications), event/waste/soil matching and game-wide deduplication. One shared fact appears after each reveal. Channel cards use one shared session key offline; new offline games get a fresh run id. Debrief combines themes from both sets into 10 nonduplicate questions; anonymous word wall retained. Launcher illustrates the two farming paths story. `npm test`: 97 passed; `npm run build`: passed.
