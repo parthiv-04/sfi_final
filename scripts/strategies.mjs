@@ -1,6 +1,6 @@
 // Coordinated decisions use only the current public event, cash, roads and stock.
 export function coordinate(E, C, state) {
-  const decisions = Object.fromEntries(state.players.map(p=>[p.id,{card:'sell',promise:p.role !== 'contract' && state.round<C.rounds}]))
+  const decisions = Object.fromEntries(state.players.map(p=>[p.id,{card:'sell',promise:E.canPromise(state,p) && state.round<C.rounds}]))
   let fed=state.players.reduce((s,p)=>s+E.contractArrivals(state,p),0)
   const need=E.isCrisis(state)?state.rules.cityCrisisNeed:state.rules.cityNeed
   const candidates=state.players.flatMap(p=>E.allowedCards(state,p).filter(card=>card==='share'||card==='release').map(card=>{

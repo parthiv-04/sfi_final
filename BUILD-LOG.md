@@ -62,3 +62,21 @@ Coordinated has the most farmer goal-winners at all counts and the lowest city l
 
 ## 6 — Facts and debrief
 Merged all 12 reference facts with their supplied source lines (fieldwork/workshop attributions, not independently verified publications), event/waste/soil matching and game-wide deduplication. One shared fact appears after each reveal. Channel cards use one shared session key offline; new offline games get a fresh run id. Debrief combines themes from both sets into 10 nonduplicate questions; anonymous word wall retained. Launcher illustrates the two farming paths story. `npm test`: 97 passed; `npm run build`: passed.
+
+## 7 — Browser and integration checks
+Finished offline connection status, responsive controls, role scenes, grow pause/deadline handling and reveal layout. Chrome checks at 360×800 and 1280×900 showed no horizontal overflow. Completed a five-farmer, five-round automatic-Council browser game and checked the final results; browser console had no errors. Saved launcher, setup and both farmer-role screenshots in reports. Final rebuilt first-round browser smoke also passed. Firebase three-phone testing remains unavailable because only the blank .env.example is present. No public deployment was performed. Before reference cleanup, `npm test`: 106 passed (including copied reference tests); `npm run build`: passed.
+
+## 8 — Policies, replay, final audit and cleanup
+Added selectable policies A/B/C and a recorded-choice replay against None using identical roles, events and pest outcomes. Comparison reports city shortages/security, company cash/debt, Mae Tha profit and waste; illegal replay choices fall back to legal choices. Policy A models partial alternative intake (20%), a limited company school promise (20%) and splits closure arrivals between hospital and hub. Policy B reduces certification costs and supports organic recovery/buyers. Policy C adds and replenishes a community reserve. These are illustrative game assumptions, not calibrated Chiang Mai measurements.
+
+Final configuration supersedes earlier milestone tuning: starting security 1.7/farmer, maximum 2.3/farmer, reserve ceil(1.1/farmer), recovery 0.75. The final blind-play audit covers 12,000 games: 200 seeds × 3 farmer counts × 5 strategies × 4 policy settings. All configured balance targets and determinism, food accounting, road and budget checks pass. Policy A/B/C reduce random and coordinated city losses at each farmer count while retaining at least 30% random losses. See reports/blind-play.json and reports/policy-summary.md for all strategies and policies.
+
+| Farmers | None: coordinated city loss | None: Share + promise city loss | Share + promise farmer goal-winners | Coordinated farmer goal-winners |
+|---|---:|---:|---:|---:|
+| 3 | 4.5% | 6% | 28.67% | 71.83% |
+| 5 | 11% | 11.5% | 35.40% | 66.90% |
+| 8 | 3% | 6% | 34.13% | 71.06% |
+
+Coordinated play performs best for city and farmer goal-winners at all three counts. Share earns less than Sell in normal and festival rounds. Removed the copied pixel-reference directory only after final policy/browser verification; original Downloads source is untouched. Removed temporary tuning scripts/reports. Suggested additional realism wording/mechanics changes were not applied, per the user's request for suggestions only.
+
+After reference cleanup, final project verification: 86 tests across 8 files passed; production build passed. The 20 removed tests belonged to the copied reference project.
