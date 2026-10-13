@@ -41,3 +41,30 @@ it('tells each farmer what they chose, earned and fed after the reveal', () => {
   expect(html).toContain(`earned ${signed(earned)}`)
   expect(html).toContain(`fed ${Math.round((line.contractUnits + line.hubUnits) * 100) / 100} household`)
 })
+
+it('tells Mae Tha members the organic trap story in round 1 only, and tracks its costs', async () => {
+  const { ROUND2_CONFIG: C } = await import('../round2/config')
+  vi.stubGlobal('sessionStorage', { getItem: (k: string) => k.endsWith('-organic') ? null : 'seen', setItem: () => {} })
+  let m = planning()
+  const p = projectRoom(m, undefined, 1000)
+  const organic = renderToStaticMarkup(<PhoneFarm view={p.privateViews.u1} room={p.publicRoom} disabled={false} onSave={() => {}} />)
+  expect(organic).toContain('Your soil needs time to recover from chemicals. Half harvest this year.')
+  expect(organic).toContain('The organic trap · 1/3')
+  const company = renderToStaticMarkup(<PhoneFarm view={p.privateViews.u3} room={p.publicRoom} disabled={false} onSave={() => {}} />)
+  expect(company).not.toContain('organic trap')
+  expect(p.privateViews.u1.player!.soilLost).toBe(C.harvestPerFarm * (1 - C.soilRecoveryFraction))
+  for (const uid of ['u1', 'u2', 'u3']) m = run(m, uid, 'plan', { choice: { card: 'sell', promise: false } })
+  expect(projectRoom(m, undefined, 1000).privateViews.u1.player!.certificatePaid).toBe(C.organicCertificateCost)
+  expect(projectRoom(m, undefined, 1000).privateViews.u3.player!.certificatePaid).toBe(0)
+})
+
+it('compares contract farmers and Mae Tha members side by side at the end', async () => {
+  const { RoleComparison } = await import('./SharedBoard')
+  const farmers = [
+    { id: 'p1', name: 'A', role: 'contract' as const, cash: 80, goal: 104, submitted: true, connected: true, debt: 10, waste: 4, fed: 0 },
+    { id: 'p2', name: 'B', role: 'maeTha' as const, cash: 90, goal: 104, submitted: true, connected: true, debt: 0, waste: 2, fed: 12 },
+    { id: 'p3', name: 'C', role: 'maeTha' as const, cash: 100, goal: 104, submitted: true, connected: true, debt: 0, waste: 4, fed: 8 },
+  ]
+  const html = renderToStaticMarkup(<RoleComparison farmers={farmers} />)
+  for (const text of ['Company contract (1)', 'Mae Tha organic (2)', '$80', '$95', '10 crates', '3 crates', '<td>10</td>', 'Organic pays off later. Contract farming pays now but locks you in debt.']) expect(html).toContain(text)
+})

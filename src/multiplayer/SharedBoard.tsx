@@ -1,6 +1,7 @@
 import { PolicyComparison } from '../ui/PolicyComparison'
 import { LoopsPage } from '../ui/Loops'
 import { CardPanel } from './LearningUI'
+import { ORGANIC_STORY } from '../learning'
 import { TimeScale } from '../ui/common'
 import { EventScene, RouteScene, CityScene, SecurityScene, FlowScene, ShopperScene } from '../ui/scenes'
 import { useEffect, useRef, useState } from 'react'
@@ -21,6 +22,13 @@ export function PhoneBars({ room, view }: { room: PublicRoom; view: PrivateView 
  return <div className="phone-bars">{view.player && <Bar label={`Cash → $${view.player.goal} goal`} value={view.player.cash} max={view.player.goal} good={view.player.cash>=view.player.goal} channel="market" />}<Bar label="People with access to food" percent value={accessPercent(room.security, room.rules.cityMaxSecurity)} max={100} danger={room.security<=room.rules.cityMaxSecurity*C.lowSecurityFraction} channel="hub" /><small>{room.event?.label} · market ${room.event?.price}/unit</small><small>Food: {room.result?.cityDelivered ?? room.previewFed}/{need} · stored: {view.ownStock}</small></div>
 }
 
+/** Contract farmers and Mae Tha members side by side: per-farmer averages, whole numbers. */
+export function RoleComparison({ farmers }: { farmers: PublicRoom['farmers'] }) {
+  const groups = (['contract', 'maeTha'] as const).map((role) => ({ role, list: farmers.filter((f) => f.role === role) })).filter((g) => g.list.length)
+  const avg = (list: PublicRoom['farmers'], pick: (f: PublicRoom['farmers'][number]) => number) => Math.round(list.reduce((s, f) => s + pick(f), 0) / list.length)
+  const rows: [string, (f: PublicRoom['farmers'][number]) => number, (v: number) => string][] = [['Cash', (f) => f.cash, money], ['Debt to the company', (f) => f.debt, (v) => `${v} crates`], ['Food wasted', (f) => f.waste, (v) => `${v} crates`], ['Households fed', (f) => f.fed, (v) => `${v}`]]
+  return <section className="workspace role-comparison"><h2>Two farming paths</h2><div className="table-scroll"><table><thead><tr><th>Average per farmer</th>{groups.map((g) => <th key={g.role}>{g.role === 'contract' ? 'Company contract' : 'Mae Tha organic'} ({g.list.length})</th>)}</tr></thead><tbody>{rows.map(([label, pick, show]) => <tr key={label}><th>{label}</th>{groups.map((g) => <td key={g.role}>{show(avg(g.list, pick))}</td>)}</tr>)}</tbody></table></div><p className="story-line">{ORGANIC_STORY.ending}</p></section>
+}
 function FinalResults({ room }: { room: PublicRoom }) {
   const closest = [...room.history].sort((a, b) => a.securityAfter - b.securityAfter)[0]
   const crises = room.history.filter((r) => ['flood', 'marketClosure'].includes(r.event.kind))
@@ -46,7 +54,7 @@ export function SharedBoard({ room, compact = false, revealStep = C.revealSteps 
       {revealStep === stage.households && <><h2>Chiang Mai households</h2><p className="hint">Vulnerable households: low-income families, older people living alone, and migrant and day-wage workers who cannot afford market prices.</p><CityScene result={result} /><small className="pixel-label">Fed {result.cityDelivered}/{result.cityNeed} households · Unmet {result.shortfall} (food here, but too expensive {result.tooExpensive ?? 0}; no food {result.noFood ?? result.shortfall}) · 1 house = {C.roundingLot} households</small></>}
       {revealStep >= stage.security && <><h2>People with access to food</h2>{result.loops?.lowSecurityNext && <p className="loop-caption">↺ Access to food is below {C.loops.lowSecurityFraction * 100}%: next round’s market price rises ${C.loops.lowSecurityPriceRise}.</p>}<SecurityScene result={result} max={room.rules.cityMaxSecurity} /><small className="pixel-label">{accessPercent(result.securityBefore, room.rules.cityMaxSecurity)}% → {accessPercent(result.securityAfter, room.rules.cityMaxSecurity)}% · Unmet {result.shortfall}</small></>}
     </section>}
-    {securityShown && ['debrief', 'gameOver'].includes(room.phase) && <><FinalResults room={room} /><LoopsPage history={room.history} />{room.comparison && <PolicyComparison comparison={room.comparison} />}</>}
+    {securityShown && ['debrief', 'gameOver'].includes(room.phase) && <><FinalResults room={room} /><RoleComparison farmers={room.farmers} /><LoopsPage history={room.history} />{room.comparison && <PolicyComparison comparison={room.comparison} />}</>}
   </section>
 }
 const num = (value: number) => Number(value.toFixed(2))
