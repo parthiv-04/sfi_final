@@ -43,6 +43,7 @@ export function PestGame({ mode, seed, showHelp, onDone, paused = false }: Props
     let raf = 0;
     let last = performance.now();
     const frame = (now: number) => {
+      if (finished.current) return;
       const dt = Math.max(0, (now - last) / 1000);
       last = now;
       let s = stepMini(state.current, dt, mode, schedule.current);
@@ -90,6 +91,12 @@ export function PestGame({ mode, seed, showHelp, onDone, paused = false }: Props
   const stopSpray = () => {
     sprayPos.current = null;
     setSpray(null);
+  };
+
+  const skip = () => {
+    if (finished.current) return;
+    finished.current = true;
+    onDone(destroyedPlants(state.current));
   };
 
   const hit = CONFIG.minigame.hand.hitboxPx;
@@ -157,6 +164,7 @@ export function PestGame({ mode, seed, showHelp, onDone, paused = false }: Props
           )}
         </Stage>
       </div>
+      <button type="button" className="quiet" disabled={paused} onClick={skip}>Skip</button>
     </div>
   );
 }

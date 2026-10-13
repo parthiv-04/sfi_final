@@ -101,11 +101,6 @@ export function tapPest(state: MiniState, id: number): MiniState {
 
 export const destroyedPlants = (state: MiniState): number => state.alive.filter((a) => !a).length;
 
-/** Units lost: plants destroyed * unitsPerPlant, capped for the path. */
-export function unitsLost(_path: Path, destroyed: number): number {
-  return Math.min(CONFIG.pestMaxLoss, destroyed * CONFIG.minigame.unitsPerPlant);
-}
-
 /** Headless play for tests: a bot that kills every pest once it is on screen, or does nothing. */
 export function runBot(seed: number, mode: MiniMode, killEveryPest: boolean): MiniState {
   const schedule = spawnSchedule(seed, mode);

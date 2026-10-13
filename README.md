@@ -45,9 +45,9 @@ The application uses query parameters (`?join=ABCD`) rather than path routing; n
 ## Play
 
 1. Choose Single player to select one farmer role, or Pass-and-play to select 3–8 farmers. Both modes let you choose policy None/A/B/C and optionally **Skip pest game**; pass-and-play also lets you choose an Automatic or human Council.
-2. For multiplayer, create a room and join its QR/code from phones; a human Council uses its own phone.
-3. Read shared context/event cards, then Grow: a 15-second seeded pest game, concurrent on phones and sequential offline, with up to one harvest unit lost. Company farmers spray; Mae Tha members hand-pick. Missing phone results time out with the configured maximum loss.
-4. Choose one available route card and, where permitted, a school/hospital promise for next round. Phones have a 60-second planning timer; offline play has handoffs and no planning deadline.
+2. For multiplayer, create a room and join its QR/code from phones; a human Council uses its own phone. Each farmer picks a farm seat and a role (company contract or Mae Tha organic) in the lobby; pass-and-play picks a role per farmer on the setup screen. Group games need at least one farmer of each role, and roles stay fixed for all five rounds (replays keep them).
+3. Read shared context/event cards, then Grow: a 10-second seeded pest game, concurrent on phones and sequential offline. It is for flavour only and never changes the harvest. Company farmers spray; Mae Tha members hand-pick. Each farmer can Skip their own game, the host (or the single screen) can **Skip for everyone**, and missing phones time out.
+4. Choose one available route card and, where permitted, a school/hospital promise for next round. Company farmers see a single card, **Sell to company**. Phones have a 60-second planning timer; offline play has handoffs and no planning deadline.
 5. After farmer submissions, the Council chooses one action or acts automatically. Follow the seven pixel reveal steps, use Skip for a short session, and read one sourced fact per round.
 6. Review cash-goal winners and the policy comparison; discuss ten questions and add anonymous reflections to the word wall.
 
@@ -56,11 +56,11 @@ For local phone access, run `npm run dev -- --host 0.0.0.0` and use the laptop�
 ## Rules and economics
 
 - Farms start at $18 with a +$8 cash goal; individual wins require surviving all five rounds. Reaching a high cash balance cannot compensate for collective failure.
-- Roughly 40% are company contract farmers, dealt reproducibly. Each round advances 1.25 produce units of debt and harvests 2.5 units before disruption/pest losses. Company debt is repaid first from accessible produce and unpaid debt carries forward. Cards are Sell and a single community-kitchen gift; school promises and repeated gifts open under A. During closure, company-taken food rots under None.
+- Players choose their roles (at least one of each). Company farmers get 1.25 produce units of input advance (debt) each round and harvest 2.5 units before disruption. Debt is repaid first from accessible produce and unpaid debt carries forward. Company farmers have one option under every policy: the company buys everything left at a fixed $3/unit. Company produce, both repaid and bought, uses up open-market buyer capacity. During a market closure the company still pays, but all company produce rots (except Policy A's diversion). Simulations without chosen roles deal 40% company farmers reproducibly.
 - Mae Tha members normally harvest 2 units; round 1 soil recovery halves this. They pay $2 certification each round, receive a $1 organic market premium, and share a pooled organic buyer cap of 0.6 units per farmer in the whole table. Unsold fresh produce is waste; the phone shows profit toward the cash goal.
 - Sell uses market buyers at $4 normally and $6 during a festival. Share prioritises hub food and sells any remainder; the hub pays $1 in normal/festival/warning weeks and $2 in crises, while Council money lasts. School/hospital promises pay $3, reserve next round’s harvest, and only half arrives in floods or closures. Extra crisis need must use the hub/reserve/Council, not school contracts.
 - Store deposits farmer-owned food at $1/unit each round; pooled stock decays 25%, rounded down. Release uses the owner’s stock. Mae Tha’s separate shared reserve never decays. All routes, including reserve releases, use available roads; floods halve transport now and harvest next round.
-- Normal emergency need is one unit per farmer; crisis need is ceil(1.5 per farmer). Initial security is 1.7 per farmer, maximum 2.3, and a fully fed round recovers 0.75 points. Initial reserve is ceil(1.1 per farmer), Council budget $6 per farmer. Warnings are 60% forecasts, not certain floods.
+- Normal emergency need is one unit per farmer; crisis need is ceil(1.5 per farmer). Initial security is 1.7 per farmer, maximum 2.3, and a fully fed round recovers 0.85 points. Initial reserve is ceil(1.25 per farmer), Council budget $6 per farmer. Warnings are 60% forecasts, not certain floods.
 - A human Council can support storage, buy food, hire trucks, or release reserve. Automatic Council buys reserve to fill projected need and finances submitted hub food; it preserves the farmer’s chosen card.
 
 ## Policy scenarios
@@ -68,13 +68,13 @@ For local phone access, run `npm run dev -- --host 0.0.0.0` and use the laptop�
 | Scenario | Changes |
 |---|---|
 | None | Existing company channels and organic costs |
-| A — more company channels | Company farmers can promise 0.2 units to schools/hospital and Share repeatedly; in closures 20% of company-taken produce reaches alternative channels, split between hospital and kitchen |
+| A — company closure diversion | In closures 20% of company-taken produce reaches alternative channels, split between hospital and kitchen. Company farmers still have only the Sell to company option |
 | B — cheaper organic farming | Certification $0, initial soil-recovery harvest 75%, pooled organic cap 0.9 units per table farmer |
 | C — emergency food bank | Reserve starts 0.2 units per farmer larger, grows by one unit before each subsequent round, and releases automatically during crises |
 
-A’s small school and emergency intake limits model partial adoption and receiving capacity; added channels remain constrained by roads. Policy settings are separate from the human Council’s round actions.
+A’s small emergency intake limit models partial adoption and receiving capacity; the diverted food remains constrained by roads. Policy settings are separate from the human Council’s round actions.
 
-The end screen replays the same event deck, role cohort, recorded farmer decisions, crop losses and human Council actions under None. Policy-exclusive choices fall back to Sell/no school promise. It compares shortage rounds, final security, company-farmer cash/debt, Mae Tha profit and waste, and reports fewer shortage rounds. An early city failure stops that replay; comparisons use the rounds recorded in the played game and are model experiments, not real-world forecasts.
+The end screen replays the same event deck, role cohort, recorded farmer decisions and human Council actions under None. Any choice that is illegal under None falls back to Sell/no school promise. It compares shortage rounds, final security, company-farmer cash/debt, Mae Tha profit and waste, and reports fewer shortage rounds. An early city failure stops that replay; comparisons use the rounds recorded in the played game and are model experiments, not real-world forecasts.
 
 ## Balance evidence and tests
 

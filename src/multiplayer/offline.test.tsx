@@ -32,7 +32,7 @@ it('plays all five rounds offline with five farms and automatic Council, renders
   const r=applyAction(m,uid,{id:String(++serial),actorUid:uid,revision:m.revision,round:m.game?.round,seatRevision:m.seatRevisions[uid]??0,type,payload},random,1000)
   expect(r.receipt.accepted,r.receipt.message).toBe(true);m=r.model
  }
- for(let i=1;i<=5;i++){act(`u${i}`,'join',{name:`Farm ${i}`});act(`u${i}`,'claimSeat',{seatId:`p${i}`})}
+ for(let i=1;i<=5;i++){act(`u${i}`,'join',{name:`Farm ${i}`});act(`u${i}`,'claimSeat',{seatId:`p${i}`});act(`u${i}`,'chooseRole',{role:i<=2?'contract':'maeTha'})}
  act('host','start')
  while(m.game!.phase!=='debrief' && m.game!.phase!=='gameOver'){
   while(m.learning.kind){
@@ -42,7 +42,7 @@ it('plays all five rounds offline with five farms and automatic Council, renders
   for(const p of m.game!.players){
    const pub=projectRoom(m);expect(renderToStaticMarkup(<SharedBoard room={pub.publicRoom}/>)).not.toContain('Disconnected')
    expect(()=>renderToStaticMarkup(<PhoneFarm room={pub.publicRoom} view={pub.privateViews[`u${p.id.slice(1)}`]} disabled={false} onSave={()=>{}}/>)).not.toThrow()
-   const card=p.role==='maeTha'?'share':isCrisis(m.game!)&&allowedCards(m.game!,p).includes('share')?'share':'sell'
+   const card=p.role==='maeTha'?'share':'sell'
    act(`u${p.id.slice(1)}`,'plan',{choice:{card,promise:canPromise(m.game!,p)&&m.game!.round<5}})
   }
   if(m.game!.phase==='resolution')act('host','nextRound')
