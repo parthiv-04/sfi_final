@@ -60,6 +60,17 @@ export default function HostView({ onBack }: { onBack: () => void }) {
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not open the room.') }
     finally { setBusy(false) }
   }
+  const leaveRoom = async () => {
+    if (!window.confirm(`Leave room ${model?.code}? Players will see the host as disconnected.`)) return
+    controller.current?.stop()
+    await controller.current?.drain()
+    stopRef.current?.()
+    stopRef.current = null
+    controller.current = null
+    serviceRef.current = null
+    localStorage.removeItem('frm-host-code')
+    setResumeCode(''); setModel(null); setQr(''); setRevealedRound(0); setError('')
+  }
   const joinUrl = model ? new URL(`?join=${model.code}`, import.meta.env.VITE_PUBLIC_APP_URL || window.location.href).href : ''
   useEffect(() => { let canceled = false; if (joinUrl) void QRCode.toDataURL(joinUrl, { width: 220, margin: 2 }).then((data) => { if (!canceled) setQr(data) }).catch((err) => setError(String(err))); return () => { canceled = true } }, [joinUrl])
   const act = async (type: Parameters<HostController['hostAction']>[0], payload: unknown = {}) => {
@@ -91,6 +102,7 @@ export default function HostView({ onBack }: { onBack: () => void }) {
       {model.game && <div className="host-controls"><button className="quiet" onClick={() => void act(model.paused ? 'resume' : 'pause')}>{model.paused ? 'Resume' : 'Pause'}</button><button className="quiet" disabled={model.game.phase !== 'planning' || !!model.learning.kind} onClick={() => void act('skipTimer')}>Skip timer</button><button className="quiet" onClick={() => { if (window.confirm('End this game now?')) void act('end') }}>End game</button>{Object.values(model.participants).filter((p) => p.seatId || p.vacatedSeat).map((p) => <div key={p.uid}><span>{p.name}</span><button className="quiet" onClick={() => void act('kick', { uid: p.uid })}>Kick disconnected player</button><select aria-label={`Replace ${p.name}`} defaultValue="" onChange={(e) => { if (e.target.value) void act('replace', { uid: p.uid, replacementUid: e.target.value }) }}><option value="">Replace with joined spectator…</option>{Object.values(model.participants).filter((s) => s.spectator).map((s) => <option key={s.uid} value={s.uid}>{s.name}</option>)}</select></div>)}</div>}
       {model.game && ['debrief', 'gameOver'].includes(model.game.phase) && <><Discussion room={{ ...projection!.publicRoom, discussionIndex: -1 }} host onQuestion={(index) => void act('question', { index })} /><div className="phone-actions"><button className="primary" onClick={() => void act('replay', { sameEvents: true })}>Play again with the same events</button><button className="quiet" onClick={() => void act('replay', { sameEvents: false })}>New game</button></div></>}
       <button className="quiet reconnect-host" disabled={busy} onClick={() => void openRoom(true)}>Reconnect / resume host</button>
+      <button className="quiet" disabled={busy} onClick={() => void leaveRoom()}>Leave room</button>
     </>}
   </main>
 }
