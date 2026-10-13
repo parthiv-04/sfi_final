@@ -36,8 +36,8 @@ function deck(random: () => number, n: number): EventCard[] {
   }
   return cards
 }
-export function createGame(names: string[], random = Math.random, council: { name?: string; seat?: 'player' | 'automatic'; mixedRoles?: boolean; policy?: PolicyScenario; roles?: FarmerRole[] } = {}): GameState {
-  const rules = scaledRules(names.length)
+export function createGame(names: string[], random = Math.random, council: { name?: string; seat?: 'player' | 'automatic'; mixedRoles?: boolean; policy?: PolicyScenario; roles?: FarmerRole[]; singlePlayer?: boolean } = {}): GameState {
+  const rules = scaledRules(names.length, council.singlePlayer)
   const events = deck(random, names.length)
   const roleOrder = names.map((_,i)=>i).sort(()=>0)
   for(let i=roleOrder.length-1;i>0;i--) {const j=Math.floor(random()*(i+1)); [roleOrder[i],roleOrder[j]]=[roleOrder[j],roleOrder[i]]}
@@ -325,7 +325,7 @@ export function policyMetrics(state: GameState): PolicyMetrics {
 // Replay actual event deck, roles, crop results and choices; no UI or new randomness.
 // Choices exclusive to policy A become Sell/no-promise under None.
 export function comparePolicy(state: GameState): PolicyComparison {
-  let baseline = createGame(state.players.map(p=>p.name),()=>0,{seat:state.council.seat,mixedRoles:state.mixedRoles,policy:'none',roles:state.players.map(p=>p.role)})
+  let baseline = createGame(state.players.map(p=>p.name),()=>0,{seat:state.council.seat,mixedRoles:state.mixedRoles,policy:'none',roles:state.players.map(p=>p.role),singlePlayer:state.players.length===1})
   baseline.events=clone(state.events)
   for (const record of state.decisionHistory) {
     if (baseline.phase==='gameOver' || baseline.phase==='debrief') break

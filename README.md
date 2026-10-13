@@ -1,6 +1,6 @@
 # Chiang Mai Food Resilience — Two farming paths, one city
 
-A pixel game for UTC2720 Project 2 about moving emergency food to Chiang Mai households during floods and market closures. Three to eight farmers and an Automatic or human Food Council play five rounds. Both farmer roles share one city meter; the host facilitates and holds no farming or Council seat.
+A pixel game for UTC2720 Project 2 about moving emergency food to Chiang Mai households during floods and market closures. Single-player mode has one farmer who chooses a role; pass-and-play and multiplayer support three to eight farmers and an Automatic or human Food Council over five rounds. Both farmer roles share one city meter; the host facilitates and holds no farming or Council seat.
 
 ## Run and check
 
@@ -12,7 +12,7 @@ npm run build
 node scripts/blind-play.mjs
 ```
 
-Single-screen mode works offline without Firebase. The host and phones use Firebase for multiplayer. The pure engine remains in `src/round2/`; game and policy numbers are in `config.ts`. Pixel assets live in `src/ui/` and do not import a reference project. The built app can be previewed with `npx vite preview`.
+Single-player and pass-and-play modes work offline without Firebase. In single-player mode, choose either the Mae Tha or contract farmer role; the automatic Council and five-round game remain the same. The host and phones use Firebase for multiplayer. The pure engine remains in `src/round2/`; game and policy numbers are in `config.ts`. Pixel assets live in `src/ui/` and do not import a reference project. The built app can be previewed with `npx vite preview`.
 
 ## Set up Firebase
 
@@ -44,7 +44,7 @@ The application uses query parameters (`?join=ABCD`) rather than path routing; n
 
 ## Play
 
-1. Choose single-screen or host mode; select 3–8 farmers, Automatic or human Council, policy None/A/B/C, and optionally **Skip pest game**.
+1. Choose Single player to select one farmer role, or Pass-and-play to select 3–8 farmers. Both modes let you choose policy None/A/B/C and optionally **Skip pest game**; pass-and-play also lets you choose an Automatic or human Council.
 2. For multiplayer, create a room and join its QR/code from phones; a human Council uses its own phone.
 3. Read shared context/event cards, then Grow: a 15-second seeded pest game, concurrent on phones and sequential offline, with up to one harvest unit lost. Company farmers spray; Mae Tha members hand-pick. Missing phone results time out with the configured maximum loss.
 4. Choose one available route card and, where permitted, a school/hospital promise for next round. Phones have a 60-second planning timer; offline play has handoffs and no planning deadline.

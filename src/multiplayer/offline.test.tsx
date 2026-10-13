@@ -7,6 +7,23 @@ import { SharedBoard } from './SharedBoard'
 import { PhoneFarm } from './PhoneControls'
 import { DEBRIEF_QUESTIONS } from '../learning'
 import type { ActionType, RoomModel } from './protocol'
+import type { FarmerRole } from '../round2/types'
+it.each(['maeTha', 'contract'] as FarmerRole[])('starts a one-farmer offline game with the selected %s role', (role) => {
+ expect(() => newRoom('SOLO', 'host', 'automatic', 1)).toThrow()
+ let m = newRoom('SOLO', 'host', 'automatic', 1, true), serial = 0
+ m.offline = true
+ const act = (uid: string, type: ActionType, payload: unknown = {}) => {
+  const result = applyAction(m, uid, { id: String(++serial), actorUid: uid, revision: m.revision, round: m.game?.round, seatRevision: m.seatRevisions[uid] ?? 0, type, payload }, () => 0.5, 1000)
+  expect(result.receipt.accepted, result.receipt.message).toBe(true)
+  m = result.model
+ }
+ act('farmer', 'join', { name: 'Solo Farmer' })
+ act('farmer', 'claimSeat', { seatId: 'p1' })
+ act('host', 'start', { roles: [role] })
+ expect(m.game?.players).toHaveLength(1)
+ expect(m.game?.players[0]).toMatchObject({ name: 'Solo Farmer', role })
+ expect(projectRoom(m).publicRoom.rules.playerCount).toBe(1)
+})
 it('plays all five rounds offline with five farms and automatic Council, renders and accepts anonymous debrief',()=>{
  const random=makeRng(1),consoleErrors=vi.spyOn(console,'error'),storage=new Map<string,string>()
  vi.stubGlobal('sessionStorage',{getItem:(k:string)=>storage.get(k)??null,setItem:(k:string,v:string)=>storage.set(k,v)})
