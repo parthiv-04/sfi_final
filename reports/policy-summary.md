@@ -1,31 +1,31 @@
 # Final balance and policy report
 
-200 seeded games per strategy, table size and policy; 12,000 games. Each cell is **city loss rate / average farmer cash**. Pest game skipped (it never changes the harvest). Events use the same seeds across policies; decisions obey role restrictions: company farmers can only Sell to the company at $3/unit.
+200 seeded games per strategy, table size and policy; 12,000 games. Each cell is **city loss rate / average farmer cash**. Pest game skipped (it never changes the harvest). Every deck includes at least one Flood and one Market closure; events use the same seeds across policies; decisions obey role restrictions (company-contract farmers can only Sell to the company at $3/unit).
 
 | Farmers | Strategy | None | A | B | C |
 |---|---|---:|---:|---:|---:|
-| 3 | random | 63% / $23.15 | 60% / $23.18 | 57.5% / $29.58 | 53.5% / $22.27 |
-| 3 | sellPromise | 60% / $30.92 | 57.5% / $31.03 | 60% / $37.27 | 39.5% / $31.94 |
-| 3 | sharePromise | 7% / $24.83 | 6% / $24.97 | 6% / $32.06 | 3.5% / $24.77 |
-| 3 | neverPromise | 94.5% / $20.69 | 92% / $20.64 | 92% / $26.66 | 89% / $19.58 |
-| 3 | coordinated | 7% / $28.10 | 4% / $28.15 | 4.5% / $34.81 | 2.5% / $27.98 |
-| 5 | random | 67.5% / $23.00 | 65% / $23.05 | 64.5% / $28.49 | 64.5% / $22.18 |
-| 5 | sellPromise | 92% / $27.59 | 79% / $27.74 | 92% / $33.20 | 48% / $28.33 |
-| 5 | sharePromise | 7% / $25.43 | 6.5% / $25.58 | 7% / $31.90 | 5% / $25.36 |
-| 5 | neverPromise | 95.5% / $20.57 | 94% / $20.56 | 94% / $25.77 | 96% / $19.52 |
-| 5 | coordinated | 7% / $27.43 | 6.5% / $27.51 | 6.5% / $33.58 | 5% / $27.32 |
-| 8 | random | 68% / $24.07 | 63% / $24.12 | 61.5% / $30.03 | 67.5% / $23.35 |
-| 8 | sellPromise | 92% / $29.15 | 89% / $29.31 | 92% / $35.03 | 55% / $29.84 |
-| 8 | sharePromise | 7% / $25.42 | 4% / $25.55 | 6% / $32.14 | 4.5% / $25.30 |
-| 8 | neverPromise | 95% / $21.89 | 94.5% / $21.92 | 93.5% / $27.57 | 97.5% / $20.97 |
-| 8 | coordinated | 6% / $27.85 | 4% / $27.90 | 3.5% / $34.30 | 3.5% / $27.70 |
+| 3 | coordinated | 6% / $26.78 | 1.5% / $26.82 | 0% / $33.49 | 0% / $26.44 |
+| 3 | sharePromise | 6% / $24.32 | 1.5% / $24.45 | 0% / $31.45 | 0% / $24.00 |
+| 3 | sellPromise | 100% / $28.28 | 91% / $28.76 | 100% / $34.37 | 21.5% / $29.79 |
+| 3 | random | 58.5% / $22.24 | 50% / $22.29 | 53% / $28.76 | 34.5% / $21.43 |
+| 3 | neverPromise | 95% / $20.30 | 88% / $20.37 | 92.5% / $26.60 | 82% / $18.96 |
+| 5 | coordinated | 8.5% / $26.40 | 6% / $26.48 | 0% / $32.48 | 1.5% / $26.10 |
+| 5 | sharePromise | 8.5% / $24.88 | 6% / $25.03 | 0% / $31.30 | 1.5% / $24.59 |
+| 5 | sellPromise | 100% / $25.29 | 100% / $26.00 | 100% / $30.58 | 24% / $26.71 |
+| 5 | random | 66.5% / $22.31 | 57% / $22.37 | 60% / $27.95 | 57.5% / $21.57 |
+| 5 | neverPromise | 99.5% / $20.07 | 95% / $20.11 | 99% / $25.42 | 93% / $18.84 |
+| 8 | coordinated | 6% / $26.67 | 4.5% / $26.67 | 0% / $33.17 | 0% / $26.49 |
+| 8 | sharePromise | 6% / $24.87 | 4.5% / $24.94 | 0% / $31.50 | 0% / $24.69 |
+| 8 | sellPromise | 100% / $26.94 | 100% / $27.55 | 100% / $32.61 | 29% / $28.24 |
+| 8 | random | 67.5% / $22.99 | 52.5% / $23.10 | 54% / $29.26 | 43% / $22.70 |
+| 8 | neverPromise | 98% / $21.17 | 94% / $21.31 | 96% / $27.14 | 99.5% / $20.43 |
 
 ## Farmer goal-winners under None
 
 | Farmers | Share + promise | Coordinated | Share city loss | Coordinated city loss |
 |---|---:|---:|---:|---:|
-| 3 | 28.33% | 70.33% | 7% | 7% |
-| 5 | 34% | 65.2% | 7% | 7% |
-| 8 | 31.87% | 69.94% | 7% | 6% |
+| 3 | 29.83% | 70% | 6% | 6% |
+| 5 | 35.8% | 62% | 8.5% | 8.5% |
+| 8 | 33.56% | 65.06% | 6% | 6% |
 
-Every None target passes, and each A/B/C scenario lowers random and coordinated city losses at every tested table size; random play still loses at least 30% under each policy. Coordinated play has the lowest city loss and most farmer goal-winners under None. To keep these targets after company farmers lost the kitchen route, the starting reserve rose from ceil(1.1) to ceil(1.25) units per farmer and full-need recovery from 0.75 to 0.85. These are results on fixed seeds, not guarantees about all possible games.
+Every None target and every policy target passes. Coordinated play has the most farmer goal-winners and the lowest city loss under None (tied with Share + promise on city loss, as the target allows). Guaranteeing both shocks raised average shocks per game from 1.6 to 2.25; to restore the targets, starting city security rose from 1.7 to 2.1 per farmer, maximum security from 2.3 to 2.8 per farmer and the Council budget from $6 to $7 per farmer. Results are on fixed seeds and are illustrative, not predictions.

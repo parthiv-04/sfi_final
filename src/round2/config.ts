@@ -21,7 +21,7 @@ export const ROUND2_CONFIG = {
   },
   minPlayers: 3,
   maxPlayers: 8,
-  scaling: { cityNeed: 1, crisisNeed: 1.5, startingSecurity: 1.7, maximumSecurity: 2.3, reserve: 1.25, councilBudget: 6 },
+  scaling: { cityNeed: 1, crisisNeed: 1.5, startingSecurity: 2.1, maximumSecurity: 2.8, reserve: 1.25, councilBudget: 7 },
   marketShares: { normal: 1.2, festival: 2, flood: 0.8, marketClosure: 0, warning: 1.2 },
   rounds: 5,
   startingCash: 18,
