@@ -50,8 +50,8 @@ it('charges Mae Tha certificate cost, caps organic demand and pays a premium',()
  expect(lines.reduce((sum,l)=>sum+l.marketUnits,0)).toBeLessThanOrEqual(s.players.length*C.organicBuyerCapPerFarmer)
  for(const l of lines){expect(l.certificateCost).toBe(C.organicCertificateCost);expect(l.revenue).toBeCloseTo(l.marketUnits*(C.events.normal.price+C.organicPricePremium));expect(r.players.find(p=>p.id===l.playerId)!.cash).toBeCloseTo(C.startingCash+l.revenue-l.certificateCost)}
 })
-it('does not over-allocate fractional harvest after pest loss',()=>{
- const s=roleGame(),p=s.players.find(p=>p.role==='maeTha')!;p.harvest=0.4
+it('does not over-allocate an odd-crate harvest',()=>{
+ const s=roleGame(),p=s.players.find(p=>p.role==='maeTha')!;p.harvest=1
  expect(()=>updateDecision(s,p.id,{card:'share',promise:false})).not.toThrow()
 })
 it('reserves Council buying after company debt and within flood road capacity',()=>{
@@ -60,5 +60,5 @@ it('reserves Council buying after company debt and within flood road capacity',(
  s=advanceCouncil({...s,council:{...s.council,plan:{policy:'procurement',quantity:1,farmerId:p.id,reserveRelease:0}}})
  s=finishDecisions(s);s=advanceCouncil(s)
  const line=s.resolution!.lines.find(l=>l.playerId===p.id)!
- expect(line.companyUnits).toBe(C.companyAdvance);expect(line.hubUnits).toBe(0.25);expect(line.transportUsed).toBe(line.transportCapacity)
+ expect(line.companyUnits).toBe(C.companyAdvance);expect(line.hubUnits).toBe(line.transportCapacity-C.companyAdvance);expect(line.transportUsed).toBe(line.transportCapacity)
 })

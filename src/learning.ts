@@ -52,7 +52,7 @@ export const DEBRIEF_QUESTIONS = [
 ] as const
 // "Why?" behind each option card: the real-world reason, 2–3 sentences.
 export const OPTION_WHY = {
-  sell: 'Markets pay the best price when buyers are there, but people only buy what they can afford. Selling does not reach households who cannot pay market prices, so it does not raise city food security.',
+  sell: 'Markets pay the best price when buyers are there, but people only buy what they can afford. Selling does not reach households who cannot pay market prices, so it does not raise the share of people with access to food.',
   company: 'The company advanced your seeds and fertiliser, so it takes produce first to repay, then buys the rest at a fixed price. Contract farmers usually have no say over the crop or the price.',
   share: 'Community kitchens feed people who cannot afford market prices, so they can only pay farmers a little, with Food Council funds. In a crisis the Council pays more because food is scarce and urgently needed.',
   store: 'Storage lets you hold food for a disruption, like the 2024 floods that cut roads and markets. Fresh vegetables still decay, and storage costs money every round.',

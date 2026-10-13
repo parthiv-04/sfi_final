@@ -36,7 +36,7 @@ describe('exact option outcomes', () => {
   })
   it('states a promise exactly for normal and crisis rounds, and only for Mae Tha before the last round', () => {
     const state = start('normal')
-    expect(promiseOutcome(state, state.players[1])).toEqual({ cash: C.contractPrice, households: 1, crisisCash: C.contractPrice * C.crisisContractArrivalFraction, crisisHouseholds: C.crisisContractArrivalFraction })
+    expect(promiseOutcome(state, state.players[1])).toEqual({ cash: C.contractPrice * C.maxContractUnits, households: C.maxContractUnits, crisisCash: C.contractPrice * C.maxContractUnits * C.crisisContractArrivalFraction, crisisHouseholds: C.maxContractUnits * C.crisisContractArrivalFraction })
     expect(promiseOutcome(state, state.players[0])).toBeNull()
     expect(promiseOutcome({ ...state, round: C.rounds }, state.players[1])).toBeNull()
   })
@@ -45,9 +45,9 @@ describe('market buyers left for Mae Tha farms', () => {
   it('subtract the company take from market capacity and cap at organic buyers', async () => {
     const { organicBuyersLeft, organicCap, companyDue } = await import('./engine')
     const state = start('normal')
-    state.events[0].capacity = 3
+    state.events[0].capacity = 20
     const company = state.players[0]
     const taken = Math.round((companyDue(state, company) + state.plans[company.id].marketUnits) * 100) / 100
-    expect(organicBuyersLeft(state)).toBe(Math.min(3 - taken, organicCap(state)))
+    expect(organicBuyersLeft(state)).toBe(Math.min(20 - taken, organicCap(state)))
   })
 })

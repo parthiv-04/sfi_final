@@ -4,9 +4,9 @@ import type { Resolution } from '../round2/types'
 
 interface Loop { title: string; kind: 'R' | 'B'; nodes: string[]; signs: ('+' | '−')[]; fired: (r: Resolution) => boolean; note: string }
 export const LOOPS: Loop[] = [
-  { title: 'Low security raises prices', kind: 'R', nodes: ['City food security', 'Market price', 'Shoppers who can afford food'], signs: ['−', '−', '+'], fired: (r) => r.loops?.lowSecurityNext, note: `Security below ${C.loops.lowSecurityFraction * 100}% of max adds $${C.loops.lowSecurityPriceRise} to next round’s price.` },
+  { title: 'Low security raises prices', kind: 'R', nodes: ['People with access to food', 'Market price', 'Shoppers who can afford food'], signs: ['−', '−', '+'], fired: (r) => r.loops?.lowSecurityNext, note: `Access to food below ${C.loops.lowSecurityFraction * 100}% adds $${C.loops.lowSecurityPriceRise} to next round’s price.` },
   { title: 'Sharing builds trust', kind: 'R', nodes: ['Sharing in a crisis', 'Community trust', 'Council budget', 'Food reaching the hub'], signs: ['+', '+', '+', '+'], fired: (r) => r.loops?.trustBudgetNext > 0, note: `Half the farms sharing in a crisis adds $${C.loops.trustBudgetPerFarmer} per farmer to the Council budget.` },
-  { title: 'Preparing for floods', kind: 'B', nodes: ['City food security', 'Urgency to prepare', 'Storing before a flood', 'Food during the flood'], signs: ['−', '+', '+', '+'], fired: (r) => r.loops?.unpreparedFlood, note: 'No one storing before a forecast flood leaves less food when roads close.' },
+  { title: 'Preparing for floods', kind: 'B', nodes: ['People with access to food', 'Urgency to prepare', 'Storing before a flood', 'Food during the flood'], signs: ['−', '+', '+', '+'], fired: (r) => r.loops?.unpreparedFlood, note: 'No one storing before a forecast flood leaves less food when roads close.' },
 ]
 function wrap(text: string) { const words = text.split(' '); const half = Math.ceil(words.length / 2); return words.length > 1 ? [words.slice(0, half).join(' '), words.slice(half).join(' ')] : [text] }
 function LoopDiagram({ loop }: { loop: Loop }) {

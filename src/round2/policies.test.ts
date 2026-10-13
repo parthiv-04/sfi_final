@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { ROUND2_CONFIG as C } from './config'
-import { advanceCouncil, advanceRound, applyPestLoss, canPromise, comparePolicy, createGame, finishDecisions, allowedCards, policyMetrics, replayUnderNone, updateDecision } from './engine'
+import { baseEvents, advanceCouncil, advanceRound, applyPestLoss, canPromise, comparePolicy, createGame, finishDecisions, allowedCards, policyMetrics, replayUnderNone, updateDecision } from './engine'
 import { makeRng } from './rng'
 import type { PolicyScenario } from './types'
 const names=['Company','Mae Tha 1','Mae Tha 2']
@@ -28,7 +28,7 @@ it('B removes certification, recovers 75% harvest and expands pooled organic dem
 })
 it('C grows reserve each round and releases it automatically even with a human Council and no budget',()=>{
  const s=setup('C');s.council.seat='player';s.council.budget=0;s.events[0]={kind:'flood',...C.events.flood}
- expect(s.reserve).toBe(s.rules.warehouseStartingUnits+s.players.length*C.policies.C.startingReserveBonusPerFarmer)
+ expect(s.reserve).toBe(s.rules.warehouseStartingUnits+Math.round(s.players.length*C.policies.C.startingReserveBonusPerFarmer))
  const start=s.reserve;let r=advanceCouncil(s);r=finishDecisions(r);r=advanceCouncil(r)
  expect(r.resolution!.councilReserveReleased).toBeGreaterThan(0);expect(r.reserve).toBeLessThan(start);expect(r.council.budget).toBe(0)
  const after=r.reserve;r=advanceRound(r);expect(r.reserve).toBe(after+C.policies.C.reserveGrowthPerRound)
@@ -65,6 +65,6 @@ it('replays the policy comparison on the identical event sequence',()=>{
   s=finishDecisions(s);if(s.phase==='gameOver')break;s=advanceRound(s)
  }
  const baseline=replayUnderNone(s)
- expect(baseline.events).toEqual(s.events)
+ expect(baseEvents(baseline.events)).toEqual(baseEvents(s.events))
  expect(baseline.history.map(r=>r.event.kind)).toEqual(s.history.map(r=>r.event.kind).slice(0,baseline.history.length))
 })
