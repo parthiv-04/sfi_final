@@ -34,6 +34,26 @@ function deck(random: () => number, n: number): EventCard[] {
       else if (cards[i + 1].kind === 'flood') cards[i + 1] = { kind: 'normal', ...C.events.normal, capacity: Math.ceil(n * C.marketShares.normal) }
     }
   }
+  // Every played run includes both shocks. Two draws are always taken, so later seeded draws do not shift.
+  const picks = [random(), random()]
+  ;(['flood', 'marketClosure'] as const).forEach((kind, k) => {
+    if (cards.slice(0, C.rounds).some((card) => card.kind === kind)) return
+    const played = cards.slice(0, C.rounds).map((card, i) => ({ card, i }))
+    // Prefer replacing an ordinary round; otherwise a flood that no warning announced and is not the only flood.
+    const ordinary = played.filter(({ card }) => card.kind === 'normal' || card.kind === 'festival')
+    const floods = played.filter(({ card, i }) => card.kind === 'flood' && !(i > 0 && cards[i - 1].kind === 'warning') && played.filter((p) => p.card.kind === 'flood').length > 1)
+    // A flood avoids slots right after a warning where possible, so forecasts keep their 60% accuracy.
+    const unannounced = ordinary.filter(({ i }) => kind !== 'flood' || i === 0 || cards[i - 1].kind !== 'warning')
+    const slots = unannounced.length ? unannounced : ordinary.length ? ordinary : floods
+    if (!slots.length) return
+    const { i } = slots[Math.floor(picks[k] * slots.length)]
+    const later = cards.findIndex((card, j) => j >= C.rounds && card.kind === kind)
+    const replacement: EventCard = later >= 0 ? cards[later] : { kind, ...C.events[kind], capacity: Math.ceil(n * C.marketShares[kind]) }
+    if (later >= 0) cards[later] = cards[i]
+    cards[i] = replacement
+    // A warning just before a swapped-in flood becomes a correct forecast.
+    if (kind === 'flood' && i > 0 && cards[i - 1].kind === 'warning') cards[i - 1].forecastHits = true
+  })
   return cards
 }
 export function createGame(names: string[], random = Math.random, council: { name?: string; seat?: 'player' | 'automatic'; mixedRoles?: boolean; policy?: PolicyScenario; roles?: FarmerRole[]; singlePlayer?: boolean } = {}): GameState {
@@ -46,7 +66,7 @@ export function createGame(names: string[], random = Math.random, council: { nam
   if(!['none','A','B','C'].includes(policy)) throw new Error('Choose None, A, B or C.')
   const roleFor = (i: number): FarmerRole => council.roles?.[i] ?? (contractSeats.has(i) ? 'contract' : 'maeTha')
   const mixedRoles = council.mixedRoles ?? true
-  if (mixedRoles && !council.singlePlayer && !(['contract', 'maeTha'] as const).every((role) => names.some((_, i) => roleFor(i) === role))) throw new Error('Choose at least one company contract farmer and one Mae Tha organic farmer.')
+  if (mixedRoles && !council.singlePlayer && !(['contract', 'maeTha'] as const).every((role) => names.some((_, i) => roleFor(i) === role))) throw new Error('Choose at least one company-contract farmer and one Mae Tha organic farmer.')
   const state: GameState = { policy, decisionHistory: [], pestResults: {}, mixedRoles, rules, history: [], endedEarly: false, round: 1, phase: 'council', players: names.map((name, i) => ({ role: mixedRoles && roleFor(i) === 'contract' ? 'contract' : 'maeTha', companyDebt: mixedRoles && roleFor(i) === 'contract' ? C.companyAdvance : 0, id: `p${i + 1}`, name: name.trim() || `Farmer ${i + 1}`, cash: C.startingCash, goal: C.startingCash + C.personalGoalBonus, harvest: mixedRoles ? roleFor(i) === 'contract' ? C.companyHarvest : C.harvestPerFarm*(policy === 'B' ? C.policies.B.soilRecoveryFraction : C.soilRecoveryFraction) : C.harvestPerFarm, contracts: [], waste: 0 })), plans: {}, decisions: {}, ready: [], activePlayerIndex: 0, events, warehouse: [], reserve: q(rules.warehouseStartingUnits + (policy === 'C' ? names.length*C.policies.C.startingReserveBonusPerFarmer : 0)), council: { name: council.name?.trim() || 'Food Council', seat: council.seat ?? 'player', budget: rules.councilStartingBudget, spent: 0, explanation: '', plan: emptyCouncilPlan('p1') }, citySecurity: rules.cityStartingSecurity, totalHubUnits: 0, totalContractsDelivered: 0, crisisWarehouseUnits: 0, totalWaste: 0, resolution: null }
   state.plans = Object.fromEntries(state.players.map((p) => [p.id, defaultPlan(state, p)]))
   state.decisions = Object.fromEntries(state.players.map((p) => [p.id, { card: 'sell', promise: false }]))
@@ -206,7 +226,7 @@ export function resolveCurrentRound(state: GameState): GameState {
   }
   if (policy.policy === 'automatic') {
     spend(Math.min(councilReserveReleased, policy.reserveRelease) * C.procurementPrice)
-    next.council.explanation = `Bought ${councilReserveReleased} reserve units because planned food fell short${isCrisis(next) ? '; funded hub deliveries during the crisis' : '; kept the rest of the budget for disruptions'}.`
+    next.council.explanation = `Funded ${councilReserveReleased} units from the Mae Tha community reserve because planned food fell short${isCrisis(next) ? '; funded community hub deliveries during the crisis' : '; kept the rest of the budget for disruptions'}.`
   }
   // Donated reserve is separate: never decays, never incurs farmer fees, never pays farmer cash.
   for (const lot of next.warehouse) lines[lot.ownerId].storageCost += lot.units * C.warehouseCostPerUnit
@@ -229,7 +249,7 @@ export function resolveCurrentRound(state: GameState): GameState {
   next.citySecurity = q(Math.max(0, Math.min(next.rules.cityMaxSecurity, before + (shortfall ? -shortfall * C.cityLossPerShortUnit : C.cityRecovery))))
   next.totalHubUnits = q(next.totalHubUnits + hubDelivered); next.totalContractsDelivered = q(next.totalContractsDelivered + contractsDelivered)
   next.resolution = { round: next.round, event: clone(event), lines: next.players.map((p) => lines[p.id]), councilReserveReleased, contractsDelivered, hubDelivered, cityDelivered: q(contractsDelivered + hubDelivered), cityNeed, crisisHubNeed, crisisHubShortfall, shortfall, securityBefore: before, securityAfter: next.citySecurity, councilSpent: q(budgetBefore - next.council.budget), waste: q(Object.values(lines).reduce((s, line) => s + line.spoilage + line.decay, 0)) }
-  if (policy.policy === 'automatic') next.council.explanation = councilReserveReleased > 0 ? `Bought ${councilReserveReleased} reserve units because planned food fell short; ${isCrisis(next) ? 'funded the crisis hub with the remaining budget' : 'kept the rest for later'}.` : shortfall > 0 ? 'Need remains unmet: the remaining reserve, roads or budget could not cover the gap.' : `Planned food met need; kept the reserve${isCrisis(next) ? ' and funded crisis hub deliveries' : ' for later'}.`
+  if (policy.policy === 'automatic') next.council.explanation = councilReserveReleased > 0 ? `Funded ${councilReserveReleased} units from the Mae Tha community reserve because planned food fell short; ${isCrisis(next) ? 'funded community hub deliveries with the remaining budget' : 'kept the rest for later'}.` : shortfall > 0 ? 'Need remains unmet: the remaining reserve, roads or budget could not cover the gap.' : `Planned food met need; kept the reserve${isCrisis(next) ? ' and funded crisis hub deliveries' : ' for later'}.`
   next.decisionHistory.push({ round: next.round, choices: clone(next.decisions), pests: clone(next.pestResults), council: clone(state.council.plan) })
   next.history.push(clone(next.resolution))
   next.phase = next.citySecurity === 0 ? 'gameOver' : 'resolution'
@@ -329,7 +349,7 @@ export function policyMetrics(state: GameState): PolicyMetrics {
 }
 // Replay actual event deck, roles, crop results and choices; no UI or new randomness.
 // Choices exclusive to policy A become Sell/no-promise under None.
-export function comparePolicy(state: GameState): PolicyComparison {
+export function replayUnderNone(state: GameState): GameState {
   let baseline = createGame(state.players.map(p=>p.name),()=>0,{seat:state.council.seat,mixedRoles:state.mixedRoles,policy:'none',roles:state.players.map(p=>p.role),singlePlayer:state.players.length===1})
   baseline.events=clone(state.events)
   for (const record of state.decisionHistory) {
@@ -349,6 +369,10 @@ export function comparePolicy(state: GameState): PolicyComparison {
     }
     baseline=advanceRound(baseline)
   }
+  return baseline
+}
+export function comparePolicy(state: GameState): PolicyComparison {
+  const baseline = replayUnderNone(state)
   const actual=policyMetrics(state), none=policyMetrics(baseline)
   return {policy:state.policy,baseline:none,actual,fewerShortageRounds:none.shortageRounds-actual.shortageRounds,rounds:state.decisionHistory.length}
 }

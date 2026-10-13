@@ -3,7 +3,7 @@ export const CONTEXT_CARDS: InfoCard[] = [
   { id: 'mae-tha', title: 'Mae Tha cooperative', icon: '🌱', text: 'Founded in 1986, Mae Tha helps members escape debt by pooling, checking and distributing mixed organic vegetables.' },
   { id: 'covid', title: 'Food without a market', icon: '🏪', text: 'COVID closures left farmers with food and no market.' },
   { id: 'floods-2024', title: 'The 2024 floods', icon: '🌊', text: 'Severe floods in Chiang Mai destroyed crops and cut off markets and roads. Food and transport were both affected.' },
-  { id: 'food-council', title: 'The Food Council', icon: '🤝', text: 'The Food Council connects city, university and community to keep food available during crises.' },
+  { id: 'food-council', title: 'The Food Council', icon: '🤝', text: 'The Food Council links city, university and community groups, coordinating food deliveries, buyers and transport so food keeps reaching people during crises.' },
 ]
 export const EVENT_CARDS: Record<string, InfoCard> = {
   normal: { id: 'normal', title: 'Everyday distribution', icon: '🚚', text: 'A busy market alone does not guarantee households get fed.' },
@@ -13,9 +13,9 @@ export const EVENT_CARDS: Record<string, InfoCard> = {
   festival: { id: 'festival', title: 'Festival opportunity', icon: '🎉', text: 'Festival prices rise, but households still need food.' },
 }
 export const CHANNEL_CARDS: InfoCard[] = [
-  { id: 'hub', title: 'Emergency hub', icon: '🍲', text: 'The Food Council community kitchen delivers your food directly to people who need it.' },
+  { id: 'hub', title: 'Community food hub/kitchen', icon: '🍲', text: 'Food shared to the community food hub/kitchen is handed out to people who need it; the Food Council helps coordinate and fund these deliveries.' },
   { id: 'contract', title: 'School or hospital contract', icon: '🏥', text: 'School and hospital promises reserve next round’s food, but disruptions can cut deliveries.' },
-  { id: 'warehouse', title: 'Your stored food', icon: '📦', text: "Mae Tha’s own stored food keeps another route open during disruptions." },
+  { id: 'warehouse', title: 'Your stored food', icon: '📦', text: 'Food you store stays in your own farm storage, ready to release to the community hub during a disruption.' },
 ]
 export const FACTS: InfoCard[] = [
   { id: 'fact-1', title: 'Chiang Mai food system', icon: '🌱', text: 'Chiang Mai gets much of its food through a single central market by the river, and floods there are becoming more frequent.', source: "Fieldwork, Prof Piyapong's lecture" },
@@ -42,7 +42,7 @@ export const DEBRIEF_QUESTIONS = [
   ['Your choices', 'When did you choose cash over feeding the city, and why?'],
   ['Preparing', 'What would you have done differently if you had trusted the flood forecast?'],
   ['Distribution', 'The farms grew enough food. Why did households still go hungry, or what kept them fed?'],
-  ['Mae Tha', 'How did the shared reserve and warehouse change what happened in a crisis?'],
+  ['Mae Tha', 'How did the Mae Tha community reserve and farm storage change what happened in a crisis?'],
   ['The Food Council', "What should the Council have done earlier, and what can a real food council do that farmers can’t?"],
   ['Real life', 'Where did this game feel realistic, and what did it leave out?'],
   ['Farmer roles', 'How did company debt and organic costs change the choices each farmer could make?'],

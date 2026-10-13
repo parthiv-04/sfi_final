@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { ROUND2_CONFIG as C } from './config'
-import { advanceCouncil, advanceRound, applyPestLoss, canPromise, comparePolicy, createGame, finishDecisions, allowedCards, policyMetrics, updateDecision } from './engine'
+import { advanceCouncil, advanceRound, applyPestLoss, canPromise, comparePolicy, createGame, finishDecisions, allowedCards, policyMetrics, replayUnderNone, updateDecision } from './engine'
 import { makeRng } from './rng'
 import type { PolicyScenario } from './types'
 const names=['Company','Mae Tha 1','Mae Tha 2']
@@ -49,4 +49,22 @@ it('compares a Policy A game against None and keeps the cohort unchanged',()=>{
  for(const p of s.players)s=updateDecision(s,p.id,{card:p.role==='contract'?'sell':'share',promise:canPromise(s,p)})
  s=finishDecisions(s);const original=structuredClone(s)
  expect(()=>comparePolicy(s)).not.toThrow();expect(s).toEqual(original)
+})
+it('puts both a flood and a market closure in every five-round deck, with forecasts still consistent',()=>{
+ for(const n of [3,5,8]) for(let seed=1;seed<=500;seed++){
+  const played=createGame(Array.from({length:n},(_,i)=>`F${i}`),makeRng(seed),{seat:'automatic'}).events.slice(0,C.rounds)
+  expect(played.some(e=>e.kind==='flood')).toBe(true);expect(played.some(e=>e.kind==='marketClosure')).toBe(true)
+  for(let i=0;i<C.rounds-1;i++) if(played[i].kind==='warning') expect(played[i+1].kind==='flood').toBe(played[i].forecastHits)
+ }
+})
+it('replays the policy comparison on the identical event sequence',()=>{
+ let s=setup('C')
+ while(s.phase!=='debrief' && s.phase!=='gameOver'){
+  s=advanceCouncil(s)
+  for(const p of s.players)s=updateDecision(s,p.id,{card:p.role==='contract'?'sell':'share',promise:canPromise(s,p)&&s.round<C.rounds})
+  s=finishDecisions(s);if(s.phase==='gameOver')break;s=advanceRound(s)
+ }
+ const baseline=replayUnderNone(s)
+ expect(baseline.events).toEqual(s.events)
+ expect(baseline.history.map(r=>r.event.kind)).toEqual(s.history.map(r=>r.event.kind).slice(0,baseline.history.length))
 })

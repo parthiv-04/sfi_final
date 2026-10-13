@@ -55,13 +55,17 @@ For local phone access, run `npm run dev -- --host 0.0.0.0` and use the laptop�
 
 ## Rules and economics
 
+Prices, harvests, costs and policy effects are simplified for gameplay. Company-contract farmer and Mae Tha organic farmer are two example farming paths; conventional farming does not necessarily mean having a company contract.
+
+
 - Farms start at $18 with a +$8 cash goal; individual wins require surviving all five rounds. Reaching a high cash balance cannot compensate for collective failure.
 - Players choose their roles (at least one of each). Company farmers get 1.25 produce units of input advance (debt) each round and harvest 2.5 units before disruption. Debt is repaid first from accessible produce and unpaid debt carries forward. Company farmers have one option under every policy: the company buys everything left at a fixed $3/unit. Company produce, both repaid and bought, uses up open-market buyer capacity. During a market closure the company still pays, but all company produce rots (except Policy A's diversion). Simulations without chosen roles deal 40% company farmers reproducibly.
 - Mae Tha members normally harvest 2 units; round 1 soil recovery halves this. They pay $2 certification each round, receive a $1 organic market premium, and share a pooled organic buyer cap of 0.6 units per farmer in the whole table. Unsold fresh produce is waste; the phone shows profit toward the cash goal.
-- Sell uses market buyers at $4 normally and $6 during a festival. Share prioritises hub food and sells any remainder; the hub pays $1 in normal/festival/warning weeks and $2 in crises, while Council money lasts. School/hospital promises pay $3, reserve next round’s harvest, and only half arrives in floods or closures. Extra crisis need must use the hub/reserve/Council, not school contracts.
-- Store deposits farmer-owned food at $1/unit each round; pooled stock decays 25%, rounded down. Release uses the owner’s stock. Mae Tha’s separate shared reserve never decays. All routes, including reserve releases, use available roads; floods halve transport now and harvest next round.
-- Normal emergency need is one unit per farmer; crisis need is ceil(1.5 per farmer). Initial security is 1.7 per farmer, maximum 2.3, and a fully fed round recovers 0.85 points. Initial reserve is ceil(1.25 per farmer), Council budget $6 per farmer. Warnings are 60% forecasts, not certain floods.
-- A human Council can support storage, buy food, hire trucks, or release reserve. Automatic Council buys reserve to fill projected need and finances submitted hub food; it preserves the farmer’s chosen card.
+- Sell uses market buyers at $4 normally and $6 during a festival. Share prioritises the community food hub/kitchen and sells any remainder; the hub pays $1 in normal/festival/warning weeks and $2 in crises, while Council money lasts. School/hospital promises pay $3, reserve next round’s harvest, and only half arrives in floods or closures. Extra crisis need must use the hub/reserve/Council, not school contracts.
+- Store deposits farmer-owned food at $1/unit each round; pooled stock decays 25%, rounded down. Release uses the owner’s stock. The separate Mae Tha community reserve never decays. All routes, including reserve releases, use available roads; floods halve transport now and harvest next round.
+- Normal emergency need is one unit per farmer; crisis need is ceil(1.5 per farmer). The city meter measures food access for vulnerable households, schools and hospitals: community hub deliveries and school/hospital contracts raise it, while market sales supply the wider city. Initial security is 2.1 per farmer, maximum 2.8, and a fully fed round recovers 0.85 points. Initial reserve is ceil(1.25 per farmer), Council budget $7 per farmer. Warnings are 60% forecasts, not certain floods.
+- Every five-round deck contains at least one Flood and one Market closure. The eight-card deck is built and shuffled as before (same cards, same 60% forecast rule); if a shock is missing from rounds 1–5, a seeded swap moves it into a Normal/Festival round, avoiding the round after a warning where possible (a warning just before a swapped-in flood counts as correct). Decks average 2.25 shocks per game instead of 1.6. Policy comparisons replay the identical sequence.
+- The Food Council coordinates food deliveries, buyers, community groups and transport; it does not own the food. A human Council can fund storage, arrange emergency purchases or extra trucks, or release the community reserve. Automatic Council buys reserve to fill projected need and finances submitted hub food; it preserves the farmer’s chosen card.
 
 ## Policy scenarios
 
@@ -74,7 +78,7 @@ For local phone access, run `npm run dev -- --host 0.0.0.0` and use the laptop�
 
 A’s small emergency intake limit models partial adoption and receiving capacity; the diverted food remains constrained by roads. Policy settings are separate from the human Council’s round actions.
 
-The end screen replays the same event deck, role cohort, recorded farmer decisions and human Council actions under None. Any choice that is illegal under None falls back to Sell/no school promise. It compares shortage rounds, final security, company-farmer cash/debt, Mae Tha profit and waste, and reports fewer shortage rounds. An early city failure stops that replay; comparisons use the rounds recorded in the played game and are model experiments, not real-world forecasts.
+Policy comparisons are illustrative game scenarios, not predictions of real-world outcomes. The end screen replays the same event deck, role cohort, recorded farmer decisions and human Council actions under None. Any choice that is illegal under None falls back to Sell/no school promise. It compares shortage rounds, final security, company-farmer cash/debt, Mae Tha profit and waste, and reports fewer shortage rounds. An early city failure stops that replay; comparisons use the rounds recorded in the played game and are model experiments, not real-world forecasts.
 
 ## Balance evidence and tests
 
