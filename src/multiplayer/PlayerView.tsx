@@ -42,6 +42,14 @@ export default function PlayerView({ onBack }: { onBack: () => void }) {
     } catch (e) { remember(null); setJoined(false); setError(e instanceof Error ? e.message : 'Could not join.') }
     finally { setBusy(false) }
   }
+  const leave = () => {
+    if (!window.confirm(`Leave room ${code}? You can join a different room afterward.`)) return
+    stops.current.forEach((stop) => stop()); stops.current = []
+    sessionStorage.removeItem(pendingKey); pendingRef.current = null; setPending(null)
+    localStorage.removeItem('frm-player-room')
+    const url = new URL(window.location.href); url.searchParams.delete('join'); window.history.replaceState(null, '', url)
+    service.current = null; setRoom(null); setView(null); setPresence(null); setJoined(false); setError(''); setMessage(''); setCode('')
+  }
   useEffect(() => { if (!autoJoined.current && name && localStorage.getItem('frm-player-room') === code) { autoJoined.current = true; void join() } }, [])
   useEffect(() => {
     if (!joined || !online || !service.current || !room) return
@@ -54,7 +62,7 @@ export default function PlayerView({ onBack }: { onBack: () => void }) {
   const disabled = busy || !!pending || !!room?.paused || !online || !hostOnline || (!!view && !!room && view.revision !== room.revision)
   return <main className="phone-shell"><header className="phone-header"><h1>Food Resilience Market</h1><HelpButtons room={room ?? undefined} /><button className="quiet" onClick={onBack}>Modes</button></header>{room?.started && <RoundTracker room={room} />}{error && <p className="error" role="alert">{error}</p>}{message && <p className="accepted-message" role="status">{message}</p>}
     {!joined ? <section className="workspace"><h2>Join a room</h2><form className="phone-form" onSubmit={(e) => { e.preventDefault(); void join() }}><label>Room code<input maxLength={NETWORK_CONFIG.roomCodeLength} value={code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))} /></label><label>Your name<input maxLength={NETWORK_CONFIG.maxNameLength} value={name} onChange={(e) => setName(e.target.value)} /></label><button className="primary" disabled={busy}>Join room</button></form></section> : <>
-      <p className="phone-room-line">Room {code} · {name}</p>{!online ? <p className="error">Disconnected. Reconnecting…</p> : !hostOnline && <p className="error">Host disconnected. Wait for the host to reopen the room.</p>}
+      <p className="phone-room-line">Room {code} · {name} <button className="quiet" onClick={leave}>Leave room</button></p>{!online ? <p className="error">Disconnected. Reconnecting…</p> : !hostOnline && <p className="error">Host disconnected. Wait for the host to reopen the room.</p>}
       {pending && <button className="quiet" disabled={!online || !hostOnline} onClick={() => { if (pendingRef.current) void service.current!.sendAction(code, pendingRef.current).catch((e) => setError(String(e))) }}>Retry pending choice safely</button>}
       {room && view && !room.started && <section className="workspace"><h2>Pick a seat</h2><div className="seat-grid">{room.seats.map((seat) => <button key={seat.id} className="quiet seat-card" disabled={disabled || (seat.taken && view.participant.seatId !== seat.id)} onClick={() => void send('claimSeat', { seatId: seat.id })}><strong>{seat.id === 'council' ? 'Food Council' : `Farm ${seat.id.slice(1)}`}</strong><span>{seat.taken ? seat.name : 'Available'}</span>{seat.role && <small>{ROLE_LABELS[seat.role]}</small>}</button>)}</div>{view.participant.seatId && view.participant.seatId !== 'council' && <><h2>Pick your role</h2><div className="seat-grid">{(['contract', 'maeTha'] as const).map((role) => <button key={role} className={`quiet seat-card ${view.participant.role === role ? 'selected' : ''}`} aria-pressed={view.participant.role === role} disabled={disabled} onClick={() => void send('chooseRole', { role })}><strong>{ROLE_LABELS[role]}</strong><span>{ROLE_HINTS[role]}</span></button>)}</div><p className="hint">Each game needs at least one company-contract farmer and one Mae Tha organic farmer.</p></>}</section>}
       {room?.started && view?.participant.spectator && <p>Spectator: the game has started.</p>}
