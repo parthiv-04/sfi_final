@@ -38,3 +38,11 @@ it('does not over-allocate fractional harvest after pest loss',()=>{
  const s=roleGame(),p=s.players.find(p=>p.role==='maeTha')!;p.harvest=0.4
  expect(()=>updateDecision(s,p.id,{card:'share',promise:false})).not.toThrow()
 })
+it('reserves Council buying after company debt and within flood road capacity',()=>{
+ let s=roleGame('flood');s.council.seat='player';s.phase='council'
+ const p=s.players.find(p=>p.role==='contract')!
+ s=advanceCouncil({...s,council:{...s.council,plan:{policy:'procurement',quantity:1,farmerId:p.id,reserveRelease:0}}})
+ s=finishDecisions(s);s=advanceCouncil(s)
+ const line=s.resolution!.lines.find(l=>l.playerId===p.id)!
+ expect(line.companyUnits).toBe(C.companyAdvance);expect(line.hubUnits).toBe(0.25);expect(line.transportUsed).toBe(line.transportCapacity)
+})

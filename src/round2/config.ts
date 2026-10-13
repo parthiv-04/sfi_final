@@ -1,5 +1,10 @@
 export const ROUND2_CONFIG = {
   playerCount: 5,
+  policies: {
+    A: { closureHubFraction: 0.2, maxCompanySchoolPromise: 0.2, closureHospitalFraction: 0.5 },
+    B: { certificateCost: 0, soilRecoveryFraction: 0.75, organicBuyerCapPerFarmer: 0.9 },
+    C: { startingReserveBonusPerFarmer: 0.2, reserveGrowthPerRound: 1 },
+  },
   contractFarmerFraction: 0.4,
   companyHarvest: 2.5,
   companyAdvance: 1.25,
@@ -16,13 +21,13 @@ export const ROUND2_CONFIG = {
   },
   minPlayers: 3,
   maxPlayers: 8,
-  scaling: { cityNeed: 1, crisisNeed: 1.5, startingSecurity: 1.9, maximumSecurity: 2, reserve: 1.1, councilBudget: 6 },
+  scaling: { cityNeed: 1, crisisNeed: 1.5, startingSecurity: 1.7, maximumSecurity: 2.3, reserve: 1.1, councilBudget: 6 },
   marketShares: { normal: 1.2, festival: 2, flood: 0.8, marketClosure: 0, warning: 1.2 },
   rounds: 5,
   startingCash: 18,
   personalGoalBonus: 8,
   harvestPerFarm: 2,
-  shareDivisor: 2,
+  shareDivisor: 1.25,
   floodHarvestFraction: 0.5,
   farmTransport: 3,
   floodTransportFraction: 0.5,
@@ -39,11 +44,11 @@ export const ROUND2_CONFIG = {
   procurementPrice: 3,
   extraTruckCapacity: 4,
   extraTruckCost: 6,
-  cityStartingSecurity: 9.5,
-  cityMaxSecurity: 10,
+  cityStartingSecurity: 8.5,
+  cityMaxSecurity: 11.5,
   cityNeed: 5,
   cityCrisisNeed: 8,
-  cityRecovery: 1,
+  cityRecovery: 0.75,
   lowSecurityFraction: 0.25,
   cityLossPerShortUnit: 1,
   eventForecastAccuracy: 0.6,
@@ -69,5 +74,5 @@ export const ROUND2_CONFIG = {
 export function scaledRules(n: number) {
   if (!Number.isInteger(n) || n < ROUND2_CONFIG.minPlayers || n > ROUND2_CONFIG.maxPlayers) throw new Error(`Choose ${ROUND2_CONFIG.minPlayers}–${ROUND2_CONFIG.maxPlayers} farmers.`)
   const m = ROUND2_CONFIG.scaling
-  return { playerCount: n, cityNeed: n * m.cityNeed, cityCrisisNeed: Math.ceil(n * m.crisisNeed), cityStartingSecurity: n * m.startingSecurity, cityMaxSecurity: n * m.maximumSecurity, warehouseStartingUnits: Math.ceil(n * m.reserve), councilStartingBudget: n * m.councilBudget }
+  return { playerCount: n, cityNeed: n * m.cityNeed, cityCrisisNeed: Math.ceil(n * m.crisisNeed), cityStartingSecurity: Math.round(n * m.startingSecurity * ROUND2_CONFIG.quantityPrecision) / ROUND2_CONFIG.quantityPrecision, cityMaxSecurity: Math.round(n * m.maximumSecurity * ROUND2_CONFIG.quantityPrecision) / ROUND2_CONFIG.quantityPrecision, warehouseStartingUnits: Math.ceil(n * m.reserve), councilStartingBudget: n * m.councilBudget }
 }

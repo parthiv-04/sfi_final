@@ -10,6 +10,7 @@ import { Sprite } from './Sprite';
 interface Props {
   mode: MiniMode;
   seed: number;
+  paused?: boolean;
   showHelp: boolean; // first season: 3-second "how to play" overlay
   onDone: (destroyedPlantCount: number) => void;
 }
@@ -19,7 +20,7 @@ const FIELD_H = CONFIG.minigame.fieldHeightPx;
 const HELP_SECONDS = 0;
 
 /** One component, two modes: spray (drag a spray can) and hand (tap pests). */
-export function PestGame({ mode, seed, showHelp, onDone }: Props) {
+export function PestGame({ mode, seed, showHelp, onDone, paused = false }: Props) {
   const [mini, setMini] = useState<MiniState>(() => initMini());
   const [helping, setHelping] = useState(showHelp);
   const [spray, setSpray] = useState<{ x: number; y: number } | null>(null);
@@ -38,7 +39,7 @@ export function PestGame({ mode, seed, showHelp, onDone }: Props) {
   }, [helping]);
 
   useEffect(() => {
-    if (helping) return;
+    if (helping || paused) return;
     let raf = 0;
     let last = performance.now();
     const frame = (now: number) => {
@@ -59,7 +60,7 @@ export function PestGame({ mode, seed, showHelp, onDone }: Props) {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [helping, mode, dur, onDone]);
+  }, [helping, mode, dur, onDone, paused]);
 
   const toField = useCallback((e: React.PointerEvent) => {
     const el = fieldRef.current;

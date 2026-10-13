@@ -38,3 +38,8 @@ it('host timeout closes Grow with bounded loss for missing phones and opens plan
   expect(m.learning.kind).toBe(null);expect(m.pestDone).toHaveLength(3)
   expect(m.planningEndsAt).toBe(75100)
 })
+it('does not skip planning from Grow and clears Grow when the host ends early',()=>{
+ const m=grow();expect(act(m,'host','skipTimer').receipt.accepted).toBe(false)
+ const ended=act(m,'host','end').model
+ expect(ended.learning.kind).toBe(null);expect(ended.pestEndsAt).toBe(null);expect(ended.game!.phase).toBe('debrief')
+})

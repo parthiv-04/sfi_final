@@ -1,3 +1,4 @@
+import { ROUND2_CONFIG as C } from '../round2/config'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Sprite } from './Sprite';
 import type { SpriteName } from './sprites';
@@ -28,7 +29,7 @@ export function CountUp({ from, to, seconds = 1, delay = 0 }: { from: number; to
     let raf = 0;
     const tick = (now: number) => {
       const p = Math.min(1, Math.max(0, (now - startAt) / span));
-      setValue(Math.round(from + (to - from) * p));
+      setValue(Math.round((from + (to - from) * p) * C.quantityPrecision) / C.quantityPrecision);
       if (p < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
