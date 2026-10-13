@@ -154,3 +154,8 @@ textarea { width: 100%; min-height: 120px; padding: .8rem; border: 1px solid #a2
 .organic-costs { display: block; margin-top: .3rem; }
 .role-comparison table { width: 100%; border-collapse: collapse; }
 .role-comparison th, .role-comparison td { padding: .4rem .5rem; border-bottom: 2px solid var(--ink, #2b2118); text-align: left; }
+
+.character-card, .destiny-card { display: flex; gap: 1rem; align-items: flex-start; }
+.character-card h2 { margin: 0 0 .2rem; }
+.character-card p, .destiny-card p { margin: .2rem 0; }
+.character-portrait { flex-shrink: 0; }

@@ -75,6 +75,9 @@ export function createGame(names: string[], random = Math.random, council: { nam
   const mixedRoles = council.mixedRoles ?? true
   if (mixedRoles && !council.singlePlayer && !(['contract', 'maeTha'] as const).every((role) => names.some((_, i) => roleFor(i) === role))) throw new Error('Choose at least one company-contract farmer and one Mae Tha organic farmer.')
   const state: GameState = { policy, decisionHistory: [], pestResults: {}, mixedRoles, rules, history: [], endedEarly: false, round: 1, phase: 'council', players: names.map((name, i) => ({ role: mixedRoles && roleFor(i) === 'contract' ? 'contract' : 'maeTha', companyDebt: mixedRoles && roleFor(i) === 'contract' ? C.companyAdvance : 0, id: `p${i + 1}`, name: name.trim() || `Farmer ${i + 1}`, cash: C.startingCash, goal: C.startingCash + C.personalGoalBonus, harvest: mixedRoles ? roleFor(i) === 'contract' ? C.companyHarvest : C.harvestPerFarm*(policy === 'B' ? C.policies.B.soilRecoveryFraction : C.soilRecoveryFraction) : C.harvestPerFarm, contracts: [], waste: 0, certificatePaid: 0, soilLost: 0 })), plans: {}, decisions: {}, ready: [], activePlayerIndex: 0, events, warehouse: [], reserve: rules.warehouseStartingUnits + (policy === 'C' ? Math.round(names.length*C.policies.C.startingReserveBonusPerFarmer) : 0), council: { name: council.name?.trim() || 'Food Council', seat: council.seat ?? 'player', budget: rules.councilStartingBudget, spent: 0, explanation: '', plan: emptyCouncilPlan('p1') }, citySecurity: rules.cityStartingSecurity, totalHubUnits: 0, totalContractsDelivered: 0, crisisWarehouseUnits: 0, totalWaste: 0, resolution: null }
+  // Character profiles: one extra draw after every other, so decks and roles are unchanged.
+  const profileStart = Math.floor(random() * 6), dealt = { contract: 0, maeTha: 0 }
+  for (const p of state.players) p.profile = (profileStart + dealt[p.role]++) % 6
   // Round 1 soil recovery: crates a Mae Tha farm would have grown on recovered soil.
   for (const p of state.players) if (mixedRoles && p.role === 'maeTha') p.soilLost = C.harvestPerFarm - p.harvest
   state.plans = Object.fromEntries(state.players.map((p) => [p.id, defaultPlan(state, p)]))
@@ -245,7 +248,7 @@ export function resolveCurrentRound(state: GameState): GameState {
   next.warehouse = next.warehouse.filter((lot) => lot.units > 0)
   for (const p of next.players) {
     const line = lines[p.id]; line.spoilage = q(line.spoilage + food[p.id]); line.transportUsed = q(capacity - left[p.id]); line.storageCost = q(line.storageCost); line.revenue = q(line.revenue)
-    p.cash = q(p.cash + line.revenue - line.storageCost - line.certificateCost); p.certificatePaid += line.certificateCost; p.waste = q(p.waste + line.spoilage + line.decay); next.totalWaste = q(next.totalWaste + line.spoilage + line.decay)
+    p.cash = q(p.cash + line.revenue - line.storageCost - line.certificateCost); p.certificatePaid += line.certificateCost; if (p.role === 'contract') line.debtAfter = p.companyDebt; p.waste = q(p.waste + line.spoilage + line.decay); next.totalWaste = q(next.totalWaste + line.spoilage + line.decay)
     if (isCrisis(next)) next.crisisWarehouseUnits = q(next.crisisWarehouseUnits + line.warehouseReleased + line.reserveReleased)
   }
   if (isCrisis(next)) next.crisisWarehouseUnits = q(next.crisisWarehouseUnits + councilReserveReleased)
