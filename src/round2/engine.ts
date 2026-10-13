@@ -1,37 +1,38 @@
-import { ROUND2_CONFIG as C, scaledRules } from './config'
+import { ROUND2_CONFIG as C, accessPercent, roundUpToLot, scaledRules } from './config'
 import type { CouncilPlan, Decision, DecisionPreview, OptionOutcome, PlanCard, EventCard, EventKind, GameState, Player, PlayerScore, ResolutionLine, TurnPlan, FarmerRole, PolicyScenario, PolicyMetrics, PolicyComparison } from './types'
 const clone = <T,>(value: T): T => structuredClone(value)
 const q = (value: number) => Math.round(value * C.quantityPrecision) / C.quantityPrecision
 export const hubPrice = (state: GameState) => state.mixedRoles ? C.hubPrices[currentEvent(state).kind] : C.hubPrice
 export const companyDue = (state: GameState, player: Player) => player.role === 'contract' ? q(Math.min(player.companyDebt, Math.max(0, player.harvest - contractsDue(state, player)), Math.max(0, transportCapacity(state) - Math.min(player.harvest, contractsDue(state, player))))) : 0
 export const certificateCost = (state: GameState) => state.policy === 'B' ? C.policies.B.certificateCost : C.organicCertificateCost
-export const organicCap = (state: GameState) => state.players.length * (state.policy === 'B' ? C.policies.B.organicBuyerCapPerFarmer : C.organicBuyerCapPerFarmer)
+export const organicCap = (state: GameState) => Math.round(state.players.length * (state.policy === 'B' ? C.policies.B.organicBuyerCapPerFarmer : C.organicBuyerCapPerFarmer))
 // Company farmers have one route: everything after debt repayment is sold to the company.
 export const canPromise = (_state: GameState, player: Player) => player.role !== 'contract'
 export const marketPrice = (state: GameState, player: Player) => player.role === 'contract' ? C.companyPrice : currentEvent(state).price + (state.mixedRoles && player.role === 'maeTha' && currentEvent(state).price > 0 ? C.organicPricePremium : 0)
 export const allowedCards = (state: GameState, player: Player) => (['sell', 'share', 'store', 'release'] as const).filter(card => (player.role !== 'contract' || card === 'sell') && (card !== 'release' || warehouseUnits(state, player.id) > 0))
-const affordable = (budget: number, price: number) => Math.floor((budget / price + Number.EPSILON) * C.quantityPrecision) / C.quantityPrecision
+// Payments buy whole crates only.
+const affordable = (budget: number, price: number) => Math.floor(budget / price + Number.EPSILON)
 export const emptyPlan = (): TurnPlan => ({ marketUnits: C.harvestPerFarm, hubUnits: 0, storeUnits: 0, warehouseRelease: 0, reserveRelease: 0, contractQuantity: 0 })
 export const emptyCouncilPlan = (farmerId: string): CouncilPlan => ({ policy: 'none', quantity: 0, farmerId, reserveRelease: 0 })
 export const currentEvent = (state: GameState) => state.events[state.round - 1]
 export const isCrisis = (state: GameState) => ['flood', 'marketClosure'].includes(currentEvent(state).kind)
 export const warehouseUnits = (state: GameState, ownerId?: string) => q(state.warehouse.filter((lot) => !ownerId || lot.ownerId === ownerId).reduce((sum, lot) => sum + lot.units, 0))
 export const contractsDue = (state: GameState, player: Player) => q(player.contracts.filter((contract) => contract.dueRound === state.round).reduce((sum, contract) => sum + contract.quantity, 0))
-export const contractArrivals = (state: GameState, player: Player) => q(Math.min(player.harvest, contractsDue(state, player), transportCapacity(state)) * (isCrisis(state) ? C.crisisContractArrivalFraction : 1))
+export const contractArrivals = (state: GameState, player: Player) => Math.floor(Math.min(player.harvest, contractsDue(state, player), transportCapacity(state)) * (isCrisis(state) ? C.crisisContractArrivalFraction : 1))
 export const transportCapacity = (state: GameState) => q((C.farmTransport + (state.council.plan.policy === 'extraTrucks' ? C.extraTruckCapacity : 0)) * (currentEvent(state).kind === 'flood' ? C.floodTransportFraction : 1))
 export const nextHarvest = (state: GameState) => C.harvestPerFarm * (currentEvent(state).kind === 'flood' ? C.floodHarvestFraction : 1)
 export const procurementReserved = (state: GameState, player: Player) => state.council.plan.policy === 'procurement' && state.council.plan.farmerId === player.id ? Math.min(state.council.plan.quantity, Math.max(0, player.harvest - contractsDue(state, player) - companyDue(state, player)), Math.max(0, transportCapacity(state) - Math.min(player.harvest, contractsDue(state, player)) - companyDue(state,player))) : 0
 export const availableHarvest = (state: GameState, player: Player) => q(Math.max(0, player.harvest - contractsDue(state, player) - companyDue(state, player) - procurementReserved(state, player)))
 export const defaultPlan = (state: GameState, player: Player): TurnPlan => ({ ...emptyPlan(), marketUnits: Math.min(availableHarvest(state, player), Math.max(0, transportCapacity(state) - Math.min(player.harvest, contractsDue(state, player)) - companyDue(state, player) - procurementReserved(state, player))) })
 function deck(random: () => number, n: number): EventCard[] {
-  const cards = (Object.keys(C.eventCopies) as EventKind[]).flatMap((kind) => Array.from({ length: C.eventCopies[kind] }, (): EventCard => ({ kind, ...C.events[kind], capacity: Math.ceil(n * C.marketShares[kind]) })))
+  const cards = (Object.keys(C.eventCopies) as EventKind[]).flatMap((kind) => Array.from({ length: C.eventCopies[kind] }, (): EventCard => ({ kind, ...C.events[kind], capacity: roundUpToLot(n * C.marketShares[kind]) })))
   for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [cards[i], cards[j]] = [cards[j], cards[i]] }
   for (let i = 0; i < cards.length; i++) {
     if (cards[i].kind !== 'warning') continue
     cards[i].forecastHits = random() < C.eventForecastAccuracy
     if (i + 1 < cards.length) {
-      if (cards[i].forecastHits) cards[i + 1] = { kind: 'flood', ...C.events.flood, capacity: Math.ceil(n * C.marketShares.flood) }
-      else if (cards[i + 1].kind === 'flood') cards[i + 1] = { kind: 'normal', ...C.events.normal, capacity: Math.ceil(n * C.marketShares.normal) }
+      if (cards[i].forecastHits) cards[i + 1] = { kind: 'flood', ...C.events.flood, capacity: roundUpToLot(n * C.marketShares.flood) }
+      else if (cards[i + 1].kind === 'flood') cards[i + 1] = { kind: 'normal', ...C.events.normal, capacity: roundUpToLot(n * C.marketShares.normal) }
     }
   }
   // Every played run includes both shocks. Two draws are always taken, so later seeded draws do not shift.
@@ -48,7 +49,7 @@ function deck(random: () => number, n: number): EventCard[] {
     if (!slots.length) return
     const { i } = slots[Math.floor(picks[k] * slots.length)]
     const later = cards.findIndex((card, j) => j >= C.rounds && card.kind === kind)
-    const replacement: EventCard = later >= 0 ? cards[later] : { kind, ...C.events[kind], capacity: Math.ceil(n * C.marketShares[kind]) }
+    const replacement: EventCard = later >= 0 ? cards[later] : { kind, ...C.events[kind], capacity: roundUpToLot(n * C.marketShares[kind]) }
     if (later >= 0) cards[later] = cards[i]
     cards[i] = replacement
     // A warning just before a swapped-in flood becomes a correct forecast.
@@ -67,13 +68,13 @@ export function createGame(names: string[], random = Math.random, council: { nam
   const roleFor = (i: number): FarmerRole => council.roles?.[i] ?? (contractSeats.has(i) ? 'contract' : 'maeTha')
   const mixedRoles = council.mixedRoles ?? true
   if (mixedRoles && !council.singlePlayer && !(['contract', 'maeTha'] as const).every((role) => names.some((_, i) => roleFor(i) === role))) throw new Error('Choose at least one company-contract farmer and one Mae Tha organic farmer.')
-  const state: GameState = { policy, decisionHistory: [], pestResults: {}, mixedRoles, rules, history: [], endedEarly: false, round: 1, phase: 'council', players: names.map((name, i) => ({ role: mixedRoles && roleFor(i) === 'contract' ? 'contract' : 'maeTha', companyDebt: mixedRoles && roleFor(i) === 'contract' ? C.companyAdvance : 0, id: `p${i + 1}`, name: name.trim() || `Farmer ${i + 1}`, cash: C.startingCash, goal: C.startingCash + C.personalGoalBonus, harvest: mixedRoles ? roleFor(i) === 'contract' ? C.companyHarvest : C.harvestPerFarm*(policy === 'B' ? C.policies.B.soilRecoveryFraction : C.soilRecoveryFraction) : C.harvestPerFarm, contracts: [], waste: 0 })), plans: {}, decisions: {}, ready: [], activePlayerIndex: 0, events, warehouse: [], reserve: q(rules.warehouseStartingUnits + (policy === 'C' ? names.length*C.policies.C.startingReserveBonusPerFarmer : 0)), council: { name: council.name?.trim() || 'Food Council', seat: council.seat ?? 'player', budget: rules.councilStartingBudget, spent: 0, explanation: '', plan: emptyCouncilPlan('p1') }, citySecurity: rules.cityStartingSecurity, totalHubUnits: 0, totalContractsDelivered: 0, crisisWarehouseUnits: 0, totalWaste: 0, resolution: null }
+  const state: GameState = { policy, decisionHistory: [], pestResults: {}, mixedRoles, rules, history: [], endedEarly: false, round: 1, phase: 'council', players: names.map((name, i) => ({ role: mixedRoles && roleFor(i) === 'contract' ? 'contract' : 'maeTha', companyDebt: mixedRoles && roleFor(i) === 'contract' ? C.companyAdvance : 0, id: `p${i + 1}`, name: name.trim() || `Farmer ${i + 1}`, cash: C.startingCash, goal: C.startingCash + C.personalGoalBonus, harvest: mixedRoles ? roleFor(i) === 'contract' ? C.companyHarvest : C.harvestPerFarm*(policy === 'B' ? C.policies.B.soilRecoveryFraction : C.soilRecoveryFraction) : C.harvestPerFarm, contracts: [], waste: 0 })), plans: {}, decisions: {}, ready: [], activePlayerIndex: 0, events, warehouse: [], reserve: rules.warehouseStartingUnits + (policy === 'C' ? Math.round(names.length*C.policies.C.startingReserveBonusPerFarmer) : 0), council: { name: council.name?.trim() || 'Food Council', seat: council.seat ?? 'player', budget: rules.councilStartingBudget, spent: 0, explanation: '', plan: emptyCouncilPlan('p1') }, citySecurity: rules.cityStartingSecurity, totalHubUnits: 0, totalContractsDelivered: 0, crisisWarehouseUnits: 0, totalWaste: 0, resolution: null }
   state.plans = Object.fromEntries(state.players.map((p) => [p.id, defaultPlan(state, p)]))
   state.decisions = Object.fromEntries(state.players.map((p) => [p.id, { card: 'sell', promise: false }]))
   return state
 }
 function quantity(value: number): void {
-  if (!Number.isFinite(value) || value < 0 || q(value) !== value) throw new Error('Use non-negative quantities with at most two decimals.')
+  if (!Number.isInteger(value) || value < 0) throw new Error('Use whole crates (0 or more).')
 }
 export function updateCouncilPlan(state: GameState, patch: Partial<CouncilPlan>): GameState {
   const next = clone(state)
@@ -177,7 +178,7 @@ export function resolveCurrentRound(state: GameState): GameState {
     lines[p.id].companyUnits = taken
     if (event.kind === 'marketClosure') {
       if (next.policy === 'A') {
-        const arrived=q(taken*C.policies.A.closureHubFraction), school=q(arrived*C.policies.A.closureHospitalFraction)
+        const arrived=Math.round(taken*C.policies.A.closureHubFraction), school=Math.round(arrived*C.policies.A.closureHospitalFraction)
         lines[p.id].contractUnits=q(lines[p.id].contractUnits+school);lines[p.id].hubUnits=q(lines[p.id].hubUnits+arrived-school);lines[p.id].companyUnits=q(taken-arrived)
       }
       else {lines[p.id].companyRotten = taken; lines[p.id].spoilage = q(lines[p.id].spoilage + taken)}
@@ -201,13 +202,13 @@ export function resolveCurrentRound(state: GameState): GameState {
     const hub = q(Math.min(plan.hubUnits, food[p.id], left[p.id], affordable(Math.max(0, next.council.budget - prePositionHold - reserveHold), hubPrice(next))))
     line.hubUnits += hub; line.revenue += spend(hub * hubPrice(next)); food[p.id] = q(food[p.id] - hub); move(p.id, hub)
   }
-  // Equal-price market offers share scarce demand in hundredths, with a rotating remainder priority.
-  const offers = next.players.map((p) => ({ id: p.id, units: p.role === 'contract' ? 0 : Math.round(Math.min(next.plans[p.id].marketUnits, food[p.id], left[p.id]) * C.quantityPrecision) }))
-  let marketLeft = Math.round(Math.max(0,event.capacity - Object.values(lines).reduce((s,l)=>s+l.companyUnits-l.companyRotten,0)) * C.quantityPrecision)
-  let organicLeft = next.mixedRoles ? Math.round(organicCap(next)*C.quantityPrecision) : Infinity
+  // Equal-price market offers share scarce demand one crate at a time, with a rotating remainder priority.
+  const offers = next.players.map((p) => ({ id: p.id, units: p.role === 'contract' ? 0 : Math.floor(Math.min(next.plans[p.id].marketUnits, food[p.id], left[p.id])) }))
+  let marketLeft = Math.floor(Math.max(0,event.capacity - Object.values(lines).reduce((s,l)=>s+l.companyUnits-l.companyRotten,0)))
+  let organicLeft = next.mixedRoles ? organicCap(next) : Infinity
   const ordered = [...offers.slice((next.round - 1) % offers.length), ...offers.slice(0, (next.round - 1) % offers.length)]
   while (marketLeft > 0 && ordered.some((offer) => offer.units > 0 && (next.players.find(p=>p.id===offer.id)!.role !== 'maeTha' || organicLeft > 0))) {
-    for (const offer of ordered) if (offer.units > 0 && marketLeft > 0 && (next.players.find(p=>p.id===offer.id)!.role !== 'maeTha' || organicLeft > 0)) { if(next.players.find(p=>p.id===offer.id)!.role === 'maeTha') organicLeft--; offer.units--; marketLeft--; lines[offer.id].marketUnits = q(lines[offer.id].marketUnits + 1 / C.quantityPrecision) }
+    for (const offer of ordered) if (offer.units > 0 && marketLeft > 0 && (next.players.find(p=>p.id===offer.id)!.role !== 'maeTha' || organicLeft > 0)) { if(next.players.find(p=>p.id===offer.id)!.role === 'maeTha') organicLeft--; offer.units--; marketLeft--; lines[offer.id].marketUnits = lines[offer.id].marketUnits + 1 }
   }
   let support = policy.policy === 'prePosition' ? policy.quantity : 0
   for (const p of next.players) {
@@ -230,7 +231,7 @@ export function resolveCurrentRound(state: GameState): GameState {
   }
   // Donated reserve is separate: never decays, never incurs farmer fees, never pays farmer cash.
   for (const lot of next.warehouse) lines[lot.ownerId].storageCost += lot.units * C.warehouseCostPerUnit
-  let decay = Math.floor(warehouseUnits(next) * C.warehouseDecayFraction)
+  let decay = C.roundingLot * Math.floor(warehouseUnits(next) * C.warehouseDecayFraction / C.roundingLot)
   for (const lot of next.warehouse) { const lost = Math.min(lot.units, decay); lot.units = q(lot.units - lost); decay = q(decay - lost); lines[lot.ownerId].decay = q(lines[lot.ownerId].decay + lost) }
   next.warehouse = next.warehouse.filter((lot) => lot.units > 0)
   for (const p of next.players) {
@@ -274,7 +275,7 @@ export function advanceRound(state: GameState): GameState {
   const upcoming = next.events[next.round - 1]
   // Low security: a closed market has no price to raise.
   if (loops?.lowSecurityNext && upcoming.price > 0) {
-    const surcharge = C.loops.lowSecurityPriceRise, lost = q(Math.min(upcoming.capacity, surcharge * next.players.length * C.loops.buyersLostPerDollarPerFarmer))
+    const surcharge = C.loops.lowSecurityPriceRise, lost = Math.min(upcoming.capacity, Math.round(surcharge * next.players.length * C.loops.buyersLostPerDollarPerFarmer))
     next.events[next.round - 1] = { ...upcoming, price: upcoming.price + surcharge, capacity: q(upcoming.capacity - lost), surcharge, buyersLost: lost }
   }
   next.council.plan = emptyCouncilPlan(next.players[0].id)
@@ -294,7 +295,7 @@ export function automaticCouncil(state: GameState): GameState {
   const next = clone(state)
   const contracts = next.players.reduce((sum, p) => sum + contractArrivals(next, p), 0)
   const offers = next.players.reduce((sum, p) => sum + next.plans[p.id].hubUnits + next.plans[p.id].warehouseRelease, 0)
-  const companyArrival = next.policy === 'A' && currentEvent(next).kind === 'marketClosure' ? next.players.reduce((sum,p)=>sum+q((companyDue(next,p)+(p.role === 'contract' ? next.plans[p.id].marketUnits : 0))*C.policies.A.closureHubFraction),0) : 0
+  const companyArrival = next.policy === 'A' && currentEvent(next).kind === 'marketClosure' ? next.players.reduce((sum,p)=>sum+Math.round((companyDue(next,p)+(p.role === 'contract' ? next.plans[p.id].marketUnits : 0))*C.policies.A.closureHubFraction),0) : 0
   const expected = contracts + companyArrival + Math.min(offers, affordable(next.council.budget, hubPrice(next)))
   const need = isCrisis(next) ? next.rules.cityCrisisNeed : next.rules.cityNeed
   next.council.plan = { policy: 'automatic', quantity: 0, farmerId: next.players[0].id, reserveRelease: Math.min(next.reserve, Math.max(0, need - expected), affordable(next.council.budget, C.procurementPrice)) }
@@ -311,7 +312,7 @@ export function allocateDecision(state: GameState, playerId: string, choice: Dec
   const free = availableHarvest(state, p)
   let left = Math.max(0, transportCapacity(state) - Math.min(p.harvest, contractsDue(state, p), transportCapacity(state)) - companyDue(state,p) - procurementReserved(state, p))
   const plan: TurnPlan = { marketUnits: 0, hubUnits: 0, storeUnits: 0, warehouseRelease: 0, reserveRelease: 0, contractQuantity: choice.promise && state.round < C.rounds ? C.maxContractUnits : 0 }
-  if (choice.card === 'share') { plan.hubUnits = Math.min(free, Math.ceil(free / C.shareDivisor), left); left -= plan.hubUnits; plan.marketUnits = Math.min(Math.max(0, free - plan.hubUnits), left) }
+  if (choice.card === 'share') { plan.hubUnits = Math.min(free, C.roundingLot * Math.ceil(free / (C.roundingLot * C.shareDivisor)), left); left -= plan.hubUnits; plan.marketUnits = Math.min(Math.max(0, free - plan.hubUnits), left) }
   if (choice.card === 'store') plan.storeUnits = Math.min(free, left)
   if (choice.card === 'sell') plan.marketUnits = Math.min(free, left)
   if (choice.card === 'release') { plan.warehouseRelease = Math.min(warehouseUnits(state, p.id), left); left -= plan.warehouseRelease; plan.marketUnits = Math.min(free, left) }
@@ -351,7 +352,7 @@ export const organicBuyersLeft = (state: GameState) => q(Math.min(Math.max(0, cu
 // A promise pays and feeds next round; a flood or market closure then halves what arrives.
 export function promiseOutcome(state: GameState, player: Player): OptionOutcome['nextRound'] | null {
   if (!canPromise(state, player) || state.round >= C.rounds) return null
-  const units = C.maxContractUnits, crisis = q(units * C.crisisContractArrivalFraction)
+  const units = C.maxContractUnits, crisis = Math.floor(units * C.crisisContractArrivalFraction)
   return { cash: q(units * C.contractPrice), households: units, crisisCash: q(crisis * C.contractPrice), crisisHouseholds: crisis }
 }
 export function finishDecisions(state: GameState): GameState {
@@ -377,7 +378,7 @@ export function applyPestLoss(state: GameState, playerId: string, destroyed: num
 export function policyMetrics(state: GameState): PolicyMetrics {
   const companies = state.players.filter(p=>p.role==='contract'), members = state.players.filter(p=>p.role==='maeTha')
   const average = (values: number[]) => values.length ? q(values.reduce((s,v)=>s+v,0)/values.length) : 0
-  return { shortageRounds: state.history.filter(r=>r.shortfall>0).length, finalSecurity: state.citySecurity, contractCash: average(companies.map(p=>p.cash)), contractDebt: average(companies.map(p=>p.companyDebt)), maeThaProfit: average(members.map(p=>p.cash-C.startingCash)), waste: state.totalWaste }
+  return { shortageRounds: state.history.filter(r=>r.shortfall>0).length, finalSecurity: accessPercent(state.citySecurity, state.rules.cityMaxSecurity), contractCash: average(companies.map(p=>p.cash)), contractDebt: average(companies.map(p=>p.companyDebt)), maeThaProfit: average(members.map(p=>p.cash-C.startingCash)), waste: state.totalWaste }
 }
 /** The deck without loop effects, so a replay recomputes its own loops. */
 export const baseEvents = (events: EventCard[]): EventCard[] => events.map(({ surcharge = 0, buyersLost = 0, ...card }) => ({ ...card, price: card.price - surcharge, capacity: q(card.capacity + buyersLost) }))

@@ -1,6 +1,7 @@
 // Pixel scene primitives adapted from Two Farmers, One City to the distribution engine.
 import { Fragment } from 'react'
 import type { EventKind, Resolution } from '../round2/types'
+import { ROUND2_CONFIG as C } from '../round2/config'
 import { Backdrop, CountUp, Crate, Pixel, Stage, vars } from './common'
 import type { SpriteName } from './sprites'
 export function EventScene({ kind }: { kind: EventKind }) {
@@ -31,11 +32,13 @@ export function FlowScene({ lanes, label }: { lanes: Lane[]; label: string }) {
   })}</Stage>
 }
 export function CityScene({ result }: { result: Resolution }) {
-  const count = Math.ceil(result.cityNeed), width = Math.max(320,count*38+20)
-  return <Stage w={width} h={210} label={`${result.cityDelivered} food units delivered; ${result.shortfall} unmet`}><Backdrop sky={result.shortfall ? 'night' : 'day'} />{Array.from({length:count},(_,i) => { const x=12+i*38, fed = i < result.cityNeed-result.shortfall; return <Fragment key={i}><Pixel name="house" x={x-4} y={62} scale={2.5} /><Pixel name={fed ? 'personFed' : 'personHungry'} x={x} y={110} scale={3} className={fed?'loop bob':'loop shake'} />{!fed && <div className="loop tear" style={{left:x+4,top:126,width:4,height:6,background:'#4aa3df'}} />}</Fragment> })}</Stage>
+  // One house per lot of households, so 20–48 households stay readable; a house is lit only when all its households are fed.
+  const lot = C.roundingLot, count = Math.ceil(result.cityNeed / lot), width = Math.max(320,count*38+20)
+  return <Stage w={width} h={210} label={`${result.cityDelivered} households fed; ${result.shortfall} unmet; each house is ${C.roundingLot} households`}><Backdrop sky={result.shortfall ? 'night' : 'day'} />{Array.from({length:count},(_,i) => { const x=12+i*38, fed = (i + 1) * lot <= result.cityNeed - result.shortfall; return <Fragment key={i}><Pixel name="house" x={x-4} y={62} scale={2.5} /><Pixel name={fed ? 'personFed' : 'personHungry'} x={x} y={110} scale={3} className={fed?'loop bob':'loop shake'} />{!fed && <div className="loop tear" style={{left:x+4,top:126,width:4,height:6,background:'#4aa3df'}} />}</Fragment> })}</Stage>
 }
 export function SecurityScene({ result, max }: { result: Resolution; max: number }) {
-  return <Stage label={`City food security ${result.securityAfter} of ${max}`}><Backdrop /><Pixel name="house" x={16} y={80} scale={4} /><div className="pixel-meter" style={{left:108,top:86,width:190,height:32}}><div className="anim fill" style={vars({w:`${result.securityAfter/max*100}%`,dur:0.7},{height:'100%',background:result.securityAfter?'#4f9d4a':'#d6453d'})} /></div><div className="num-badge" style={{left:150,top:132}}><CountUp from={result.securityBefore} to={result.securityAfter} /> / {max}</div></Stage>
+  const pct = (value: number) => Math.round(value / max * 100)
+  return <Stage label={`${pct(result.securityAfter)}% of people have access to food`}><Backdrop /><Pixel name="house" x={16} y={80} scale={4} /><div className="pixel-meter" style={{left:108,top:86,width:190,height:32}}><div className="anim fill" style={vars({w:`${result.securityAfter/max*100}%`,dur:0.7},{height:'100%',background:result.securityAfter?'#4f9d4a':'#d6453d'})} /></div><div className="num-badge" style={{left:150,top:132}}><CountUp from={pct(result.securityBefore)} to={pct(result.securityAfter)} />%</div></Stage>
 }
 export function RoleScene({ contract, debt, recovery }: { contract: boolean; debt: number; recovery: boolean }) {
   return <Stage h={160} label={contract ? 'Company input advance' : recovery ? 'Soil recovering' : 'Mae Tha mixed crops'}><Backdrop ground={recovery?'soil':'grass'} /><Pixel name="farmer" x={24} y={78} scale={3} shirt={contract?'#4aa3df':'#5cb85c'} />{contract ? <><Pixel name="truck" x={-60} y={100} scale={2} className="anim fly" style={vars({dx:'170px',dy:'0px',arc:'0px',dur:1.2})} /><div className="tag" style={{left:166,top:26}}>Produce owed: {debt}</div></> : <>{[0,1,2,3].map(i=><Pixel key={i} name={recovery?'sprout':'plant'} x={134+i*36} y={112} scale={2} className="loop sway" />)}{recovery && <div className="loop bob label" style={{left:94,top:72}}>z z z</div>}</>}</Stage>
