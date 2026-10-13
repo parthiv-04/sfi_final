@@ -1,5 +1,5 @@
 import { ROUND2_CONFIG as C, scaledRules } from './config'
-import type { CouncilPlan, Decision, DecisionPreview, EventCard, EventKind, GameState, Player, PlayerScore, ResolutionLine, TurnPlan, FarmerRole, PolicyScenario, PolicyMetrics, PolicyComparison } from './types'
+import type { CouncilPlan, Decision, DecisionPreview, OptionOutcome, PlanCard, EventCard, EventKind, GameState, Player, PlayerScore, ResolutionLine, TurnPlan, FarmerRole, PolicyScenario, PolicyMetrics, PolicyComparison } from './types'
 const clone = <T,>(value: T): T => structuredClone(value)
 const q = (value: number) => Math.round(value * C.quantityPrecision) / C.quantityPrecision
 export const hubPrice = (state: GameState) => state.mixedRoles ? C.hubPrices[currentEvent(state).kind] : C.hubPrice
@@ -321,6 +321,23 @@ export function previewDecision(state: GameState, playerId: string, choice: Deci
   const moves = q(attemptedContract + plan.marketUnits + plan.hubUnits + plan.storeUnits + plan.warehouseRelease)
   const companySale = p.role === 'contract' ? plan.marketUnits * C.companyPrice : 0
   return { cashMin: q(contract * C.contractPrice + companySale - costs), cashMax: q(contract * C.contractPrice + plan.marketUnits * marketPrice(state,p) + paidHub * hubPrice(state) - costs), households: q(contract + paidHub), moves, stored: plan.storeUnits, limited: plan.marketUnits + plan.hubUnits + plan.storeUnits < availableHarvest(state, p) || (choice.card === 'release' && plan.warehouseRelease < warehouseUnits(state, p.id)) }
+}
+// Exact numbers for one card, isolated from fixed costs (certificate) and earlier promises that arrive regardless.
+export function optionOutcome(state: GameState, playerId: string, card: PlanCard): OptionOutcome {
+  const p = state.players.find((farmer) => farmer.id === playerId)!
+  const plan = allocateDecision(state, playerId, { card, promise: false })
+  const paidHub = p.role === 'contract' ? 0 : q(Math.min(plan.hubUnits + plan.warehouseRelease, affordable(state.council.budget, hubPrice(state))))
+  const fees = p.role === 'contract' ? 0 : q((Math.max(0, warehouseUnits(state, p.id) - plan.warehouseRelease) + plan.storeUnits) * C.warehouseCostPerUnit)
+  const cash = q(plan.marketUnits * marketPrice(state, p) + paidHub * hubPrice(state) - fees)
+  return { cash, households: paidHub, marketUnits: p.role === 'contract' ? 0 : plan.marketUnits, hubUnits: q(Math.min(plan.hubUnits, paidHub)), stored: plan.storeUnits, released: plan.warehouseRelease, fees, hubPlanned: q(plan.hubUnits + plan.warehouseRelease), unmoved: q(Math.max(0, availableHarvest(state, p) - plan.marketUnits - plan.hubUnits - plan.storeUnits)) }
+}
+// Market units left for Mae Tha farms after the company's planned take, capped by organic buyers.
+export const organicBuyersLeft = (state: GameState) => q(Math.min(Math.max(0, currentEvent(state).capacity - state.players.reduce((sum, p) => sum + (p.role === 'contract' ? q(companyDue(state, p) + state.plans[p.id].marketUnits) : 0), 0)), state.mixedRoles ? organicCap(state) : Infinity))
+// A promise pays and feeds next round; a flood or market closure then halves what arrives.
+export function promiseOutcome(state: GameState, player: Player): OptionOutcome['nextRound'] | null {
+  if (!canPromise(state, player) || state.round >= C.rounds) return null
+  const units = C.maxContractUnits, crisis = q(units * C.crisisContractArrivalFraction)
+  return { cash: q(units * C.contractPrice), households: units, crisisCash: q(crisis * C.contractPrice), crisisHouseholds: crisis }
 }
 export function finishDecisions(state: GameState): GameState {
   const next = clone(state)

@@ -21,4 +21,6 @@ export interface GameState { policy: PolicyScenario; decisionHistory: DecisionRe
 
 export type PlanCard = 'sell' | 'share' | 'store' | 'release'
 export interface Decision { card: PlanCard; promise: boolean }
+/** Exact effect of one option this round. Market cash assumes every offered unit sells; marketUnits says how many that is. */
+export interface OptionOutcome { cash: number; households: number; marketUnits: number; hubUnits: number; stored: number; released: number; fees: number; hubPlanned: number; unmoved: number; nextRound?: { cash: number; households: number; crisisCash: number; crisisHouseholds: number } }
 export interface DecisionPreview { cashMin: number; cashMax: number; households: number; moves: number; stored: number; limited: boolean }
