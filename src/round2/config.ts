@@ -71,8 +71,9 @@ export const ROUND2_CONFIG = {
   },
 } as const
 
-export function scaledRules(n: number) {
-  if (!Number.isInteger(n) || n < ROUND2_CONFIG.minPlayers || n > ROUND2_CONFIG.maxPlayers) throw new Error(`Choose ${ROUND2_CONFIG.minPlayers}–${ROUND2_CONFIG.maxPlayers} farmers.`)
+export function scaledRules(n: number, singlePlayer = false) {
+  const minimum = singlePlayer ? 1 : ROUND2_CONFIG.minPlayers
+  if (!Number.isInteger(n) || n < minimum || n > ROUND2_CONFIG.maxPlayers) throw new Error(`Choose ${minimum}–${ROUND2_CONFIG.maxPlayers} farmers.`)
   const m = ROUND2_CONFIG.scaling
   return { playerCount: n, cityNeed: n * m.cityNeed, cityCrisisNeed: Math.ceil(n * m.crisisNeed), cityStartingSecurity: Math.round(n * m.startingSecurity * ROUND2_CONFIG.quantityPrecision) / ROUND2_CONFIG.quantityPrecision, cityMaxSecurity: Math.round(n * m.maximumSecurity * ROUND2_CONFIG.quantityPrecision) / ROUND2_CONFIG.quantityPrecision, warehouseStartingUnits: Math.ceil(n * m.reserve), councilStartingBudget: n * m.councilBudget }
 }

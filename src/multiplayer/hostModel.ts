@@ -2,7 +2,7 @@
 import { pickRoundFact, CONTEXT_CARDS, DEBRIEF_QUESTIONS } from '../learning'
 import { ROUND2_CONFIG as C, scaledRules } from '../round2/config'
 import { comparePolicy, allowedCards, applyPestLoss, advanceCouncil, advanceRound, availableHarvest, contractsDue, createGame, currentEvent, finishPlanning, finishDecisions, previewDecision, updateDecision, rankPlayers, transportCapacity, updateCouncilPlan, updatePlan, validatePlan, warehouseUnits } from '../round2/engine'
-import type { CouncilPlan, Decision, PlanCard, TurnPlan } from '../round2/types'
+import type { CouncilPlan, Decision, FarmerRole, PlanCard, TurnPlan } from '../round2/types'
 import { NETWORK_CONFIG } from './config'
 import { farmSeats } from './protocol'
 import type { ActionReceipt, ClientAction, PrivateView, Publication, PublicRoom, RoomModel, SeatId } from './protocol'
@@ -13,7 +13,7 @@ const number = (value: unknown) => { if (typeof value !== 'number' || !Number.is
 const text = (value: unknown) => { if (typeof value !== 'string') throw new Error('Text is required.'); return value }
 function parseChoice(value: unknown): Decision { const p = object(value); keys(p, ['card', 'promise']); if (!['sell', 'share', 'store', 'release'].includes(text(p.card)) || typeof p.promise !== 'boolean') throw new Error('Tap a plan card and choose the contract toggle.'); return { card: p.card as PlanCard, promise: p.promise } }
 function parseCouncil(value: unknown): CouncilPlan { const p = object(value); keys(p, ['policy', 'quantity', 'farmerId', 'reserveRelease']); return { policy: text(p.policy) as CouncilPlan['policy'], quantity: number(p.quantity), farmerId: text(p.farmerId), reserveRelease: number(p.reserveRelease) } }
-export function newRoom(code: string, hostUid: string, councilMode: RoomModel['councilMode'], farmerCount: number = C.playerCount): RoomModel { return { policy: 'none', usedFacts: [], roundFact: null, factRound: 0, skipPest: false, pestSeed: Array.from(code).reduce((s,c)=>Math.imul(s,31)+c.charCodeAt(0),0) >>> 0, pestEndsAt: null, pestDone: [], discussionIndex: -1, reflections: {}, offline: false, learning: { kind: null, index: 0 }, runId: 0, version: NETWORK_CONFIG.roomVersion, farmerCount: scaledRules(farmerCount).playerCount, code, hostUid, councilMode, revision: 0, participants: {}, game: null, handled: {}, seatRevisions: {}, planningEndsAt: null, savedSeats: [], paused: false, remainingMs: 0, ended: false } }
+export function newRoom(code: string, hostUid: string, councilMode: RoomModel['councilMode'], farmerCount: number = C.playerCount, singlePlayer = false): RoomModel { return { policy: 'none', usedFacts: [], roundFact: null, factRound: 0, skipPest: false, pestSeed: Array.from(code).reduce((s,c)=>Math.imul(s,31)+c.charCodeAt(0),0) >>> 0, pestEndsAt: null, pestDone: [], discussionIndex: -1, reflections: {}, offline: false, learning: { kind: null, index: 0 }, runId: 0, version: NETWORK_CONFIG.roomVersion, farmerCount: scaledRules(farmerCount, singlePlayer).playerCount, code, hostUid, councilMode, revision: 0, participants: {}, game: null, handled: {}, seatRevisions: {}, planningEndsAt: null, savedSeats: [], paused: false, remainingMs: 0, ended: false } }
 export function applyAction(model: RoomModel, senderUid: string, action: ClientAction, random = Math.random, now = 0): { model: RoomModel; receipt: ActionReceipt } {
   const key = `${senderUid}:${action.id}`
   if (model.handled[key]) return { model: clone(model), receipt: clone(model.handled[key]) }
@@ -49,8 +49,9 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
       else {
         if (typeof p.sameEvents !== 'boolean') throw new Error('Choose same events or new events.')
         const previous = next.game
-        next.game = createGame(previous.players.map((farmer) => farmer.name), random, { name: previous.council.name, seat: next.councilMode, policy: next.policy })
-        if (p.sameEvents) { next.game = createGame(previous.players.map(p=>p.name),random,{name:previous.council.name,seat:next.councilMode,policy:next.policy,roles:previous.players.map(p=>p.role)});next.game.events=clone(previous.events) }
+        const singlePlayer = previous.players.length === 1
+        next.game = createGame(previous.players.map((farmer) => farmer.name), random, { name: previous.council.name, seat: next.councilMode, policy: next.policy, roles: singlePlayer ? previous.players.map((farmer) => farmer.role) : undefined, singlePlayer })
+        if (p.sameEvents) { next.game = createGame(previous.players.map(p=>p.name),random,{name:previous.council.name,seat:next.councilMode,policy:next.policy,roles:previous.players.map(p=>p.role),singlePlayer});next.game.events=clone(previous.events) }
         next.game = advanceCouncil(next.game); next.learning = { kind: 'howto', index: 0 }; next.savedSeats = []; next.pestDone = []; next.pestEndsAt = null; next.planningEndsAt = null; next.runId++; next.usedFacts=[];next.roundFact=null;next.factRound=0; next.discussionIndex = -1; next.reflections = {}; next.paused = false; next.ended = false
       }
     } else if (action.type === 'reflection') {
@@ -98,18 +99,24 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
       if (Object.values(next.participants).some((entry) => entry.uid !== senderUid && entry.seatId === seat)) throw new Error('That seat is already taken.')
       participant.seatId = seat; participant.spectator = false
     } else if (action.type === 'start') {
-      keys(p, ['farmerCount']); if (senderUid !== next.hostUid) throw new Error('Only the host can start.')
+      keys(p, ['farmerCount', 'roles']); if (senderUid !== next.hostUid) throw new Error('Only the host can start.')
       if (next.game) throw new Error('Already started.')
       const joined = farmSeats(next.farmerCount).map((seat) => Object.values(next.participants).find((entry) => entry.seatId === seat)).filter((entry) => !!entry)
       const count = p.farmerCount === undefined ? next.farmerCount : number(p.farmerCount)
-      scaledRules(count)
+      const singlePlayer = next.offline && count === 1
+      scaledRules(count, singlePlayer)
+      let roles: FarmerRole[] | undefined
+      if (p.roles !== undefined) {
+        if (!singlePlayer || !Array.isArray(p.roles) || p.roles.length !== count || p.roles.some((role) => role !== 'contract' && role !== 'maeTha')) throw new Error('Choose a farmer role for single-player mode.')
+        roles = p.roles as FarmerRole[]
+      }
       if (count > next.farmerCount || joined.length < count) throw new Error(`Wait for ${count} farmers, or start with the number already joined.`)
       const council = Object.values(next.participants).find((entry) => entry.seatId === 'council')
       if (next.councilMode === 'player' && !council) throw new Error('Ask one phone to take the Council seat.')
       const occupants = joined.slice(0, count)
       for (const entry of joined) { const index = occupants.indexOf(entry); entry.seatId = index >= 0 ? farmSeats(count)[index] : null; entry.spectator = index < 0 }
       next.farmerCount = count
-      next.game = createGame(occupants.map((entry) => entry!.name), random, { name: council?.name ?? 'Automatic Council', seat: next.councilMode, policy: next.policy })
+      next.game = createGame(occupants.map((entry) => entry!.name), random, { name: council?.name ?? 'Automatic Council', seat: next.councilMode, policy: next.policy, roles, singlePlayer })
       next.game = advanceCouncil(next.game); next.learning = { kind: 'howto', index: 0 }; next.planningEndsAt = null
     } else {
       if (!next.game) throw new Error('The game has not started.')
