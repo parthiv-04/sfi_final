@@ -8,6 +8,9 @@ import type { PrivateView, PublicRoom } from './protocol'
 import type { Resolution } from '../round2/types'
 import type { Lane } from '../ui/scenes'
 export const money = (value: number) => `${value < 0 ? '-' : ''}$${Math.abs(value).toFixed(2)}`
+const dollars = (value: number) => Number.isInteger(value) ? `${value}` : value.toFixed(2)
+/** Signed exact dollars: +$4, −$1, $0, +$1.50. */
+export const signed = (value: number) => value === 0 ? '$0' : `${value < 0 ? '−' : '+'}$${dollars(Math.abs(value))}`
 export const units = (value: number) => `${Number(value.toFixed(2))} units`
 export const title = (value: string) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())
 export function Bar({ label, value, max, good = false, danger = false, channel = '' }: { label: string; value: number; max: number; good?: boolean; danger?: boolean; channel?: string }) { return <div className={`goal-bar channel-${channel} ${good ? 'reached' : ''} ${danger ? 'danger' : ''}`}><div className="bar-label"><span>{label}</span><strong>{Number(value.toFixed(2))} / {max}</strong></div><div className="bar-track" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.max(0, Math.min(max, value))}><div className="bar-fill" style={{ width: `${Math.max(0, Math.min(C.quantityPrecision, max ? value / max * C.quantityPrecision : 0))}%`, transitionDuration: `${C.meterAnimationMs}ms` }} /></div></div> }
@@ -66,6 +69,15 @@ function HubFlow({ result }: { result: Resolution }) {
   const reserve = num(result.councilReserveReleased + sum(result, (l) => l.reserveReleased)), fromStorage = sum(result, (l) => l.warehouseReleased), shared = num(result.hubDelivered - reserve)
   const lanes: Lane[] = [{ from: 'farmer', shirt: '#5cb85c', to: 'storehouse', tag: `Farms → kitchen ${shared}${fromStorage ? ` (${fromStorage} stored)` : ''}`, units: shared, recipients: true }, { from: 'warehouse', to: 'storehouse', tag: `Community reserve → kitchen ${reserve}`, units: reserve, recipients: true }]
   return <FlowScene lanes={lanes} label={lanes.map((lane) => lane.tag).join('; ')} />
+}
+const CARD_NAMES = { sell: 'Sell', share: 'Share', store: 'Store', release: 'Release' } as const
+/** After a reveal: what this farmer chose, earned and fed. */
+export function YourChoice({ room, view, label = 'Your choice' }: { room: PublicRoom; view: PrivateView; label?: string }) {
+  const line = room.result?.lines.find((l) => l.playerId === view.player?.id)
+  if (!line || !view.choice || !view.player) return null
+  const earned = num(line.revenue - line.storageCost - line.certificateCost), households = num(line.contractUnits + line.hubUnits)
+  const chose = view.player.role === 'contract' ? 'Sell to company' : `${CARD_NAMES[view.choice.card]}${view.choice.promise ? ' + promise' : ''}`
+  return <p className="your-choice" role="status"><strong>{label}:</strong> {chose} · earned {signed(earned)} · fed {households} household{households === 1 ? '' : 's'}</p>
 }
 export function RoundReveal({ room, onComplete }: { room: PublicRoom; onComplete?: () => void }) {
   // Each reveal step waits for the host: Next moves on, Replay restarts the current animation.

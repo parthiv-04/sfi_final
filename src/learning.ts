@@ -50,3 +50,13 @@ export const DEBRIEF_QUESTIONS = [
   ['Policy', 'Which policy reduced shortages most, and who paid for it?'],
   ['Our model', 'Which arrow in our causal loop diagram would you redraw after playing?'],
 ] as const
+// "Why?" behind each option card: the real-world reason, 2–3 sentences.
+export const OPTION_WHY = {
+  sell: 'Markets pay the best price when buyers are there, but people only buy what they can afford. Selling does not reach households who cannot pay market prices, so it does not raise city food security.',
+  company: 'The company advanced your seeds and fertiliser, so it takes produce first to repay, then buys the rest at a fixed price. Contract farmers usually have no say over the crop or the price.',
+  share: 'Community kitchens feed people who cannot afford market prices, so they can only pay farmers a little, with Food Council funds. In a crisis the Council pays more because food is scarce and urgently needed.',
+  store: 'Storage lets you hold food for a disruption, like the 2024 floods that cut roads and markets. Fresh vegetables still decay, and storage costs money every round.',
+  release: 'Food stored before a flood or market closure can still reach the community hub when markets cannot. That is why preparing early matters.',
+  promise: 'Schools and hospitals need steady supplies, so they pay a fixed fair price for promised food. When floods cut roads or markets close, deliveries break and only half gets through.',
+  reserve: 'Mae Tha members pool food in a shared reserve as a community safety net. The Council pays to move it to the hub when planned food falls short.',
+} as const
