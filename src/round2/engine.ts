@@ -5,11 +5,17 @@ const q = (value: number) => Math.round(value * C.quantityPrecision) / C.quantit
 export const hubPrice = (state: GameState) => state.mixedRoles ? C.hubPrices[currentEvent(state).kind] : C.hubPrice
 export const companyDue = (state: GameState, player: Player) => player.role === 'contract' ? q(Math.min(player.companyDebt, Math.max(0, player.harvest - contractsDue(state, player)), Math.max(0, transportCapacity(state) - Math.min(player.harvest, contractsDue(state, player))))) : 0
 export const certificateCost = (state: GameState) => state.policy === 'B' ? C.policies.B.certificateCost : C.organicCertificateCost
+// Interested organic shoppers in the table, before the premium turns some away.
 export const organicCap = (state: GameState) => Math.round(state.players.length * (state.policy === 'B' ? C.policies.B.organicBuyerCapPerFarmer : C.organicBuyerCapPerFarmer))
 // Company farmers have one route: everything after debt repayment is sold to the company.
 export const canPromise = (_state: GameState, player: Player) => player.role !== 'contract'
 export const marketPrice = (state: GameState, player: Player) => player.role === 'contract' ? C.companyPrice : currentEvent(state).price + (state.mixedRoles && player.role === 'maeTha' && currentEvent(state).price > 0 ? C.organicPricePremium : 0)
 export const allowedCards = (state: GameState, player: Player) => (['sell', 'share', 'store', 'release'] as const).filter(card => (player.role !== 'contract' || card === 'sell') && (card !== 'release' || warehouseUnits(state, player.id) > 0))
+const marketOpen = (state: GameState) => currentEvent(state).price > 0 && currentEvent(state).capacity > 0
+/** Shoppers who walk off because the price is above normal. */
+export const walkOffs = (state: GameState) => marketOpen(state) ? Math.min(currentEvent(state).capacity, Math.round(state.players.length * C.shoppers.walkOffsPerDollarPerFarmer * Math.max(0, currentEvent(state).price - C.shoppers.normalPrice))) : 0
+/** Organic shoppers turned away by the organic premium (every open-market week). */
+export const organicWalkOffs = (state: GameState) => state.mixedRoles && marketOpen(state) ? Math.min(organicCap(state), Math.round(state.players.length * C.shoppers.organicWalkOffsPerFarmer)) : 0
 // Payments buy whole crates only.
 const affordable = (budget: number, price: number) => Math.floor(budget / price + Number.EPSILON)
 export const emptyPlan = (): TurnPlan => ({ marketUnits: C.harvestPerFarm, hubUnits: 0, storeUnits: 0, warehouseRelease: 0, reserveRelease: 0, contractQuantity: 0 })
@@ -204,8 +210,9 @@ export function resolveCurrentRound(state: GameState): GameState {
   }
   // Equal-price market offers share scarce demand one crate at a time, with a rotating remainder priority.
   const offers = next.players.map((p) => ({ id: p.id, units: p.role === 'contract' ? 0 : Math.floor(Math.min(next.plans[p.id].marketUnits, food[p.id], left[p.id])) }))
-  let marketLeft = Math.floor(Math.max(0,event.capacity - Object.values(lines).reduce((s,l)=>s+l.companyUnits-l.companyRotten,0)))
-  let organicLeft = next.mixedRoles ? organicCap(next) : Infinity
+  const walked = walkOffs(next), organicWalked = organicWalkOffs(next), offered = offers.reduce((s, o) => s + o.units, 0)
+  let marketLeft = Math.floor(Math.max(0,event.capacity - walked - Object.values(lines).reduce((s,l)=>s+l.companyUnits-l.companyRotten,0)))
+  let organicLeft = next.mixedRoles ? organicCap(next) - organicWalked : Infinity
   const ordered = [...offers.slice((next.round - 1) % offers.length), ...offers.slice(0, (next.round - 1) % offers.length)]
   while (marketLeft > 0 && ordered.some((offer) => offer.units > 0 && (next.players.find(p=>p.id===offer.id)!.role !== 'maeTha' || organicLeft > 0))) {
     for (const offer of ordered) if (offer.units > 0 && marketLeft > 0 && (next.players.find(p=>p.id===offer.id)!.role !== 'maeTha' || organicLeft > 0)) { if(next.players.find(p=>p.id===offer.id)!.role === 'maeTha') organicLeft--; offer.units--; marketLeft--; lines[offer.id].marketUnits = lines[offer.id].marketUnits + 1 }
@@ -249,6 +256,9 @@ export function resolveCurrentRound(state: GameState): GameState {
   const shortfall = q(Math.max(0, baseGap - hubDelivered) + crisisHubShortfall)
   next.citySecurity = q(Math.max(0, Math.min(next.rules.cityMaxSecurity, before + (shortfall ? -shortfall * C.cityLossPerShortUnit : C.cityRecovery))))
   next.totalHubUnits = q(next.totalHubUnits + hubDelivered); next.totalContractsDelivered = q(next.totalContractsDelivered + contractsDelivered)
+  // Unmet households while offered market food went unsold: the food was here, but too expensive.
+  const shoppers = { walkOffs: walked, organicWalkOffs: organicWalked, unsoldOffered: q(offered - Object.values(lines).reduce((s, l) => s + l.marketUnits, 0)) }
+  const tooExpensive = q(Math.min(shortfall, shoppers.unsoldOffered))
   const previous = next.history[next.history.length - 1]
   const sharers = next.players.filter((p) => ['share', 'release'].includes(next.decisions[p.id]?.card)).length
   const loops = {
@@ -256,7 +266,7 @@ export function resolveCurrentRound(state: GameState): GameState {
     trustBudgetNext: next.round < C.rounds && isCrisis(next) && sharers >= next.players.length * C.loops.crisisShareFraction ? next.players.length * C.loops.trustBudgetPerFarmer : 0,
     unpreparedFlood: event.kind === 'flood' && previous?.event.kind === 'warning' && previous.round === next.round - 1 && previous.lines.every((line) => line.stored === 0),
   }
-  next.resolution = { round: next.round, event: clone(event), lines: next.players.map((p) => lines[p.id]), councilReserveReleased, contractsDelivered, hubDelivered, cityDelivered: q(contractsDelivered + hubDelivered), cityNeed, crisisHubNeed, crisisHubShortfall, shortfall, securityBefore: before, securityAfter: next.citySecurity, councilSpent: q(budgetBefore - next.council.budget), waste: q(Object.values(lines).reduce((s, line) => s + line.spoilage + line.decay, 0)), loops }
+  next.resolution = { round: next.round, event: clone(event), lines: next.players.map((p) => lines[p.id]), councilReserveReleased, contractsDelivered, hubDelivered, cityDelivered: q(contractsDelivered + hubDelivered), cityNeed, crisisHubNeed, crisisHubShortfall, shortfall, securityBefore: before, securityAfter: next.citySecurity, councilSpent: q(budgetBefore - next.council.budget), waste: q(Object.values(lines).reduce((s, line) => s + line.spoilage + line.decay, 0)), loops, shoppers, tooExpensive, noFood: q(shortfall - tooExpensive) }
   if (policy.policy === 'automatic') next.council.explanation = councilReserveReleased > 0 ? `Funded ${councilReserveReleased} units from the Mae Tha community reserve because planned food fell short; ${isCrisis(next) ? 'funded community hub deliveries with the remaining budget' : 'kept the rest for later'}.` : shortfall > 0 ? 'Need remains unmet: the remaining reserve, roads or budget could not cover the gap.' : `Planned food met need; kept the reserve${isCrisis(next) ? ' and funded crisis hub deliveries' : ' for later'}.`
   next.decisionHistory.push({ round: next.round, choices: clone(next.decisions), pests: clone(next.pestResults), council: clone(state.council.plan) })
   next.history.push(clone(next.resolution))
@@ -275,8 +285,8 @@ export function advanceRound(state: GameState): GameState {
   const upcoming = next.events[next.round - 1]
   // Low security: a closed market has no price to raise.
   if (loops?.lowSecurityNext && upcoming.price > 0) {
-    const surcharge = C.loops.lowSecurityPriceRise, lost = Math.min(upcoming.capacity, Math.round(surcharge * next.players.length * C.loops.buyersLostPerDollarPerFarmer))
-    next.events[next.round - 1] = { ...upcoming, price: upcoming.price + surcharge, capacity: q(upcoming.capacity - lost), surcharge, buyersLost: lost }
+    const surcharge = C.loops.lowSecurityPriceRise
+    next.events[next.round - 1] = { ...upcoming, price: upcoming.price + surcharge, surcharge }
   }
   next.council.plan = emptyCouncilPlan(next.players[0].id)
   next.council.explanation = ''
@@ -348,7 +358,7 @@ export function optionOutcome(state: GameState, playerId: string, card: PlanCard
   return { cash, households: paidHub, marketUnits: p.role === 'contract' ? 0 : plan.marketUnits, hubUnits: q(Math.min(plan.hubUnits, paidHub)), stored: plan.storeUnits, released: plan.warehouseRelease, fees, hubPlanned: q(plan.hubUnits + plan.warehouseRelease), unmoved: q(Math.max(0, availableHarvest(state, p) - plan.marketUnits - plan.hubUnits - plan.storeUnits)) }
 }
 // Market units left for Mae Tha farms after the company's planned take, capped by organic buyers.
-export const organicBuyersLeft = (state: GameState) => q(Math.min(Math.max(0, currentEvent(state).capacity - state.players.reduce((sum, p) => sum + (p.role === 'contract' ? q(companyDue(state, p) + state.plans[p.id].marketUnits) : 0), 0)), state.mixedRoles ? organicCap(state) : Infinity))
+export const organicBuyersLeft = (state: GameState) => Math.max(0, Math.min(currentEvent(state).capacity - walkOffs(state) - state.players.reduce((sum, p) => sum + (p.role === 'contract' ? q(companyDue(state, p) + state.plans[p.id].marketUnits) : 0), 0), state.mixedRoles ? organicCap(state) - organicWalkOffs(state) : Infinity))
 // A promise pays and feeds next round; a flood or market closure then halves what arrives.
 export function promiseOutcome(state: GameState, player: Player): OptionOutcome['nextRound'] | null {
   if (!canPromise(state, player) || state.round >= C.rounds) return null
@@ -381,7 +391,7 @@ export function policyMetrics(state: GameState): PolicyMetrics {
   return { shortageRounds: state.history.filter(r=>r.shortfall>0).length, finalSecurity: accessPercent(state.citySecurity, state.rules.cityMaxSecurity), contractCash: average(companies.map(p=>p.cash)), contractDebt: average(companies.map(p=>p.companyDebt)), maeThaProfit: average(members.map(p=>p.cash-C.startingCash)), waste: state.totalWaste }
 }
 /** The deck without loop effects, so a replay recomputes its own loops. */
-export const baseEvents = (events: EventCard[]): EventCard[] => events.map(({ surcharge = 0, buyersLost = 0, ...card }) => ({ ...card, price: card.price - surcharge, capacity: q(card.capacity + buyersLost) }))
+export const baseEvents = (events: EventCard[]): EventCard[] => events.map(({ surcharge = 0, ...card }) => ({ ...card, price: card.price - surcharge }))
 // Replay actual event deck, roles, crop results and choices; no UI or new randomness.
 // Choices exclusive to policy A become Sell/no-promise under None.
 export function replayUnderNone(state: GameState): GameState {

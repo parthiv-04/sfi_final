@@ -3,7 +3,7 @@ export const ROUND2_CONFIG = {
   playerCount: 5,
   policies: {
     A: { closureHubFraction: 0.2, closureHospitalFraction: 0.5 },
-    B: { certificateCost: 0, soilRecoveryFraction: 0.75, organicBuyerCapPerFarmer: 3.6 },
+    B: { certificateCost: 0, soilRecoveryFraction: 0.75, organicBuyerCapPerFarmer: 4.4 },
     C: { startingReserveBonusPerFarmer: 0.8, reserveGrowthPerRound: 4 },
   },
   contractFarmerFraction: 0.4,
@@ -13,7 +13,7 @@ export const ROUND2_CONFIG = {
   soilRecoveryFraction: 0.5,
   organicCertificateCost: 8,
   organicPricePremium: 1,
-  organicBuyerCapPerFarmer: 2.4,
+  organicBuyerCapPerFarmer: 3.2, // organic shoppers per farmer before price walk-offs
   hubPrices: { normal: 1, festival: 1, warning: 1, flood: 2, marketClosure: 2 },
   minigame: {
     durationSec: 10, plants: 5, fieldWidthPx: 320, fieldHeightPx: 300, plantBandPx: 44,
@@ -54,11 +54,16 @@ export const ROUND2_CONFIG = {
   cityRecovery: 3.4,
   lowSecurityFraction: 0.25,
   cityLossPerShortUnit: 1,
+  // Shoppers react to price (milestone 11). Walk-offs are whole shoppers; each would have bought one crate.
+  shoppers: {
+    normalPrice: 4, // the everyday market price; dearer weeks lose shoppers
+    walkOffsPerDollarPerFarmer: 0.8, // per $1 above normal, this many shoppers per farmer say "Why is it so high?" and leave
+    organicWalkOffsPerFarmer: 0.8, // the organic premium turns this many organic shoppers per farmer away every open-market week
+  },
   // Feedback loops (milestone 10).
   loops: {
     lowSecurityFraction: 0.4, // security below 40% of max at the end of a round...
     lowSecurityPriceRise: 1, // ...raises next round's market price by $1...
-    buyersLostPerDollarPerFarmer: 0.8, // ...and each $1 above normal costs this many market buyers per farmer.
     crisisShareFraction: 0.5, // at least half the farms Share or Release in a crisis...
     trustBudgetPerFarmer: 4, // ...adds $1 per farmer to next round's Council budget.
   },

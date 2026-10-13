@@ -46,7 +46,7 @@ export const DEBRIEF_QUESTIONS = [
   ['The Food Council', "What should the Council have done earlier, and what can a real food council do that farmers can’t?"],
   ['Real life', 'Where did this game feel realistic, and what did it leave out?'],
   ['Farmer roles', 'How did company debt and organic costs change the choices each farmer could make?'],
-  ['Affordability', 'Which routes gave farmers a fair price while keeping food affordable, and who paid the difference?'],
+  ['Affordability', 'When was food too expensive for people even though it was there? Who paid for a fair farmer price?'],
   ['Policy', 'Which policy reduced shortages most, and who paid for it?'],
   ['Our model', 'Which arrow in our causal loop diagram would you redraw after playing?'],
 ] as const

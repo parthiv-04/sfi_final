@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ROUND2_CONFIG as C } from './config'
-import { advanceCouncil, advanceRound, baseEvents, createGame, currentEvent, finishDecisions, marketPrice, replayUnderNone, updateDecision } from './engine'
+import { walkOffs, advanceCouncil, advanceRound, baseEvents, createGame, currentEvent, finishDecisions, marketPrice, replayUnderNone, updateDecision } from './engine'
 import { makeRng } from './rng'
 import type { EventKind, GameState } from './types'
 
@@ -24,11 +24,9 @@ describe('feedback loops', () => {
     expect(state.resolution!.securityAfter).toBeLessThan(state.rules.cityMaxSecurity * C.loops.lowSecurityFraction)
     expect(state.resolution!.loops.lowSecurityNext).toBe(true)
     const next = advanceCouncil(advanceRound(state)), event = currentEvent(next)
-    const lost = Math.round(C.loops.lowSecurityPriceRise * roles.length * C.loops.buyersLostPerDollarPerFarmer * 100) / 100
     expect(event.price).toBe(C.events.normal.price + C.loops.lowSecurityPriceRise)
     expect(event.surcharge).toBe(C.loops.lowSecurityPriceRise)
-    expect(event.capacity).toBe(Math.ceil(roles.length * C.marketShares.normal) - lost)
-    expect(event.buyersLost).toBe(lost)
+    expect(walkOffs(next)).toBe(Math.round(roles.length * C.shoppers.walkOffsPerDollarPerFarmer * C.loops.lowSecurityPriceRise))
     expect(marketPrice(next, next.players[1])).toBe(C.events.normal.price + C.loops.lowSecurityPriceRise + C.organicPricePremium)
   })
   it('does not raise prices when security stays healthy, or for a closed market', () => {
