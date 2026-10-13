@@ -31,10 +31,28 @@ export function FlowScene({ lanes, label }: { lanes: Lane[]; label: string }) {
     </Fragment>
   })}</Stage>
 }
+/** Market shoppers: buyers walk to the stall; shoppers priced out ask "Why is it so high?" and walk off. Sprites cap at 6 per row; labels are exact. */
+export function ShopperScene({ bought, walkOffs, organicWalkOffs, price }: { bought: number; walkOffs: number; organicWalkOffs: number; price: number }) {
+  const buyers = Math.min(6, bought), general = Math.min(6, walkOffs), organic = Math.min(6, organicWalkOffs), stallX = 250
+  const leaver = (key: string, x: number, y: number, i: number, organicShopper: boolean) => <div key={key} className="anim fly" style={vars({ dx: `${-(x + 140)}px`, dy: '0px', arc: '0px', d: 1.6 + i * 0.12, dur: 1.2 }, { left: x, top: y })}>
+    <Pixel name="personHungry" x={0} y={0} scale={2} />
+    <div className="bubble anim appear" style={vars({ d: 0.6 + i * 0.12, dur: 0.3 }, { left: -20, top: -26 })}>{organicShopper ? 'Organic? Too dear!' : 'Why is it so high?'}</div>
+  </div>
+  return <Stage h={200} label={`${bought} crates bought at $${price}; ${walkOffs} shoppers walked off because the price was above $${C.shoppers.normalPrice}; ${organicWalkOffs} organic shoppers walked off at the organic premium`}><Backdrop />
+    <Pixel name="market" x={stallX} y={98} scale={2.5} />
+    {Array.from({ length: buyers }, (_, i) => <div key={`b${i}`} className="anim fly" style={vars({ dx: `${stallX - 30 - i * 22}px`, dy: '0px', arc: '0px', d: i * 0.12, dur: 1 }, { left: -10, top: 100 })}><Pixel name="personFed" x={0} y={0} scale={2} /></div>)}
+    {Array.from({ length: general }, (_, i) => leaver(`w${i}`, stallX - 40 - i * 24, 150, i, false))}
+    {Array.from({ length: organic }, (_, i) => leaver(`o${i}`, stallX - 40 - (general + i) * 24, 150, general + i, true))}
+    <div className="tag" style={{ left: 6, top: 8 }}>Bought {bought} · walked off {walkOffs + organicWalkOffs}</div>
+  </Stage>
+}
+/** Houses in order: fed, food here but too expensive, no food. One house per lot of households keeps 20–48 households readable. */
 export function CityScene({ result }: { result: Resolution }) {
-  // One house per lot of households, so 20–48 households stay readable; a house is lit only when all its households are fed.
   const lot = C.roundingLot, count = Math.ceil(result.cityNeed / lot), width = Math.max(320,count*38+20)
-  return <Stage w={width} h={210} label={`${result.cityDelivered} households fed; ${result.shortfall} unmet; each house is ${C.roundingLot} households`}><Backdrop sky={result.shortfall ? 'night' : 'day'} />{Array.from({length:count},(_,i) => { const x=12+i*38, fed = (i + 1) * lot <= result.cityNeed - result.shortfall; return <Fragment key={i}><Pixel name="house" x={x-4} y={62} scale={2.5} /><Pixel name={fed ? 'personFed' : 'personHungry'} x={x} y={110} scale={3} className={fed?'loop bob':'loop shake'} />{!fed && <div className="loop tear" style={{left:x+4,top:126,width:4,height:6,background:'#4aa3df'}} />}</Fragment> })}</Stage>
+  const fedCount = result.cityNeed - result.shortfall, dear = result.tooExpensive ?? 0, none = result.noFood ?? result.shortfall
+  return <Stage w={width} h={230} label={`${fedCount} households fed; food here, but too expensive for ${dear}; no food for ${none}; each house is ${lot} households`}><Backdrop sky={result.shortfall ? 'night' : 'day'} />
+    {dear > 0 && <div className="tag" style={{left:6,top:190}}><span className="price-tag">$$</span> food here, but too expensive</div>}
+    {Array.from({length:count},(_,i) => { const x=12+i*38, fed = (i + 1) * lot <= fedCount, tooDear = !fed && i * lot < fedCount + dear; return <Fragment key={i}><Pixel name="house" x={x-4} y={72} scale={2.5} /><Pixel name={fed ? 'personFed' : 'personHungry'} x={x} y={120} scale={3} className={fed?'loop bob':'loop shake'} />{tooDear && <div className="price-tag" style={{left:x+2,top:52}}>$$</div>}{!fed && <div className="loop tear" style={{left:x+4,top:136,width:4,height:6,background:'#4aa3df'}} />}</Fragment> })}</Stage>
 }
 export function SecurityScene({ result, max }: { result: Resolution; max: number }) {
   const pct = (value: number) => Math.round(value / max * 100)

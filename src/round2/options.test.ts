@@ -42,12 +42,12 @@ describe('exact option outcomes', () => {
   })
 })
 describe('market buyers left for Mae Tha farms', () => {
-  it('subtract the company take from market capacity and cap at organic buyers', async () => {
-    const { organicBuyersLeft, organicCap, companyDue } = await import('./engine')
+  it('subtract walk-offs and the company take from market capacity and cap at organic buyers who stay', async () => {
+    const { organicBuyersLeft, organicCap, organicWalkOffs, walkOffs, companyDue } = await import('./engine')
     const state = start('normal')
     state.events[0].capacity = 20
     const company = state.players[0]
     const taken = Math.round((companyDue(state, company) + state.plans[company.id].marketUnits) * 100) / 100
-    expect(organicBuyersLeft(state)).toBe(Math.min(20 - taken, organicCap(state)))
+    expect(organicBuyersLeft(state)).toBe(Math.min(20 - walkOffs(state) - taken, organicCap(state) - organicWalkOffs(state)))
   })
 })

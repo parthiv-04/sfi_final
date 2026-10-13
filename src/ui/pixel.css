@@ -123,3 +123,7 @@ html {background:#d9ecb8;}
 :root {background:#d9ecb8;}
 body {min-height:100vh;}
 .host-room-entry > label:not(.field), .setup-panel > label:not(.field) {display:block;margin:12px 0;}
+
+.stage .bubble { position: absolute; }
+.bubble { background: #fff; border: 2px solid var(--ink); padding: 1px 4px; font-size: 10px; white-space: nowrap; }
+.price-tag { background: #ffe9a8; border: 2px solid var(--ink); padding: 0 3px; font-size: 11px; font-weight: 700; }
