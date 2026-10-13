@@ -104,7 +104,7 @@ button:active {transform: translateY(2px); box-shadow: 0 2px 0 var(--ink);}
 h1,h2,h3 {color: var(--ink);}
 .phone-shell, .round-two-shell, .setup-shell {color: var(--ink);}
 .plan-card.selected, .seat-card.selected {border-color: var(--green-dark); background: #e4efc8;}
-.stage-fit {max-width: 640px;} .pixel-label {display: block; font-size: 12px; margin: 8px 0;}
+.stage-fit {max-width: 640px;} .pixel-label {display: block; font-size: 18px; font-weight: 700; margin: 10px 0;}
 @media (prefers-reduced-motion: reduce) { :root {--t: 0; --loop: paused;} .loop,.rain-drop {animation: none;} }
 @media (max-width: 400px) { .phone-shell, .round-two-shell {padding: 8px;} .workspace {padding: 10px;} h1 {font-size: 21px;} .plan-cards {grid-template-columns: 1fr 1fr;} .round-tracker {flex-wrap: wrap;} .round-tracker div {flex-wrap: wrap;} .plan-card button {padding: 8px; font-size: 12px;} }
 .shutter {background: repeating-linear-gradient(#777 0 5px,#aaa 5px 8px); border:3px solid var(--ink);}
