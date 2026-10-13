@@ -64,3 +64,13 @@ it('shows spoilage in a closure only for what the engine recorded', () => {
   expect(total(share.r, (l) => l.companyRotten)).toBe(0)
   expect(rotten(diverted)).toBe(visual(total(share.r, (l) => l.spoilage)))
 })
+
+it('shows no moving crops or trucks on a route that delivered nothing', async () => {
+  const { RouteScene, FlowScene } = await import('../ui/scenes')
+  const route = renderToStaticMarkup(<RouteScene amount={0} />)
+  expect(route).not.toContain('anim fly')
+  expect(route).toContain('No food sent')
+  const flow = renderToStaticMarkup(<FlowScene label="empty" lanes={[{ from: 'farmer', to: 'market', tag: 'Sold 0', units: 0 }]} />)
+  expect(flow).not.toContain('anim fly')
+  expect(flow).toContain('No food sent')
+})
