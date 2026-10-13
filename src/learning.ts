@@ -60,3 +60,10 @@ export const OPTION_WHY = {
   promise: 'Schools and hospitals need steady supplies, so they pay a fixed fair price for promised food. When floods cut roads or markets close, deliveries break and only half gets through.',
   reserve: 'Mae Tha members pool food in a shared reserve as a community safety net. The Council pays to move it to the hub when planned food falls short.',
 } as const
+// Organic trap story for Mae Tha members in round 1 (one panel each; numbers come from config).
+export const ORGANIC_STORY = {
+  soil: (fraction: number) => `Your soil needs time to recover from chemicals. ${fraction === 0.5 ? 'Half' : `${fraction * 100}%`} harvest this year.`,
+  certificate: (cost: number) => cost ? `The organic certificate costs $${cost} every round.` : 'Under this policy the organic certificate is free.',
+  buyers: 'Organic sells for more, but most locals can’t afford it.',
+  ending: 'Organic pays off later. Contract farming pays now but locks you in debt.',
+} as const

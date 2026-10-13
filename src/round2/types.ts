@@ -13,7 +13,7 @@ export interface DecisionRecord { round: number; choices: Record<string, Decisio
 export interface PolicyMetrics { shortageRounds: number; finalSecurity: number; contractCash: number; contractDebt: number; maeThaProfit: number; waste: number }
 export interface PolicyComparison { policy: PolicyScenario; baseline: PolicyMetrics; actual: PolicyMetrics; fewerShortageRounds: number; rounds: number }
 export type FarmerRole = 'contract' | 'maeTha'
-export interface Player { role: FarmerRole; companyDebt: number; id: string; name: string; cash: number; goal: number; harvest: number; contracts: Contract[]; waste: number }
+export interface Player { role: FarmerRole; companyDebt: number; id: string; name: string; cash: number; goal: number; harvest: number; contracts: Contract[]; waste: number; certificatePaid: number; soilLost: number }
 export interface TurnPlan { marketUnits: number; hubUnits: number; storeUnits: number; warehouseRelease: number; reserveRelease: number; contractQuantity: number }
 export interface WarehouseLot { ownerId: string; units: number; depositedRound: number }
 export type CouncilPolicy = 'none' | 'prePosition' | 'procurement' | 'extraTrucks' | 'automatic'

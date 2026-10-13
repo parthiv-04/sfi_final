@@ -149,3 +149,8 @@ textarea { width: 100%; min-height: 120px; padding: .8rem; border: 1px solid #a2
 .loop-sign { font-size: 15px; font-weight: 700; fill: #b5462f; }
 .loop-kind { font-size: 30px; font-weight: 700; fill: currentColor; }
 .loop-fired { font-weight: 700; }
+
+.organic-story .story-line, .story-line { font-size: 1.1rem; font-weight: 700; }
+.organic-costs { display: block; margin-top: .3rem; }
+.role-comparison table { width: 100%; border-collapse: collapse; }
+.role-comparison th, .role-comparison td { padding: .4rem .5rem; border-bottom: 2px solid var(--ink, #2b2118); text-align: left; }
