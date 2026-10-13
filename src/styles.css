@@ -141,3 +141,11 @@ body:has(.tutorial-tooltip) .round-two-shell { padding-bottom: 10rem; }
 textarea { width: 100%; min-height: 120px; padding: .8rem; border: 1px solid #a2beab; border-radius: 7px; font: inherit; resize: vertical; }
 @media (max-width: 850px) { .projector-board { grid-template-columns: 1fr; } .board-players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; } .board-players h2 { grid-column: 1/-1; } }
 @media (max-width: 500px) { .final-farmers { grid-template-columns: 1fr; } .bar-label { font-size: .9rem; } }
+
+.loop-caption { display: inline-block; margin: .4rem 0; padding: .35rem .6rem; border: 3px solid var(--ink, #2b2118); background: #ffe9a8; font-weight: 700; font-size: 1rem; }
+.loops-page .loop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; }
+.loop-diagram { width: 100%; max-width: 340px; color: var(--ink, #2b2118); }
+.loop-node { font-size: 12px; font-weight: 700; fill: currentColor; }
+.loop-sign { font-size: 15px; font-weight: 700; fill: #b5462f; }
+.loop-kind { font-size: 30px; font-weight: 700; fill: currentColor; }
+.loop-fired { font-weight: 700; }

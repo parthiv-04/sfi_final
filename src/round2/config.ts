@@ -51,6 +51,14 @@ export const ROUND2_CONFIG = {
   cityRecovery: 0.85,
   lowSecurityFraction: 0.25,
   cityLossPerShortUnit: 1,
+  // Feedback loops (milestone 10).
+  loops: {
+    lowSecurityFraction: 0.4, // security below 40% of max at the end of a round...
+    lowSecurityPriceRise: 1, // ...raises next round's market price by $1...
+    buyersLostPerDollarPerFarmer: 0.2, // ...and each $1 above normal costs this many market buyers per farmer.
+    crisisShareFraction: 0.5, // at least half the farms Share or Release in a crisis...
+    trustBudgetPerFarmer: 1, // ...adds $1 per farmer to next round's Council budget.
+  },
   eventForecastAccuracy: 0.6,
   planningSeconds: 60,
   quantityPrecision: 100,

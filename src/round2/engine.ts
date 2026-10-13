@@ -248,7 +248,14 @@ export function resolveCurrentRound(state: GameState): GameState {
   const shortfall = q(Math.max(0, baseGap - hubDelivered) + crisisHubShortfall)
   next.citySecurity = q(Math.max(0, Math.min(next.rules.cityMaxSecurity, before + (shortfall ? -shortfall * C.cityLossPerShortUnit : C.cityRecovery))))
   next.totalHubUnits = q(next.totalHubUnits + hubDelivered); next.totalContractsDelivered = q(next.totalContractsDelivered + contractsDelivered)
-  next.resolution = { round: next.round, event: clone(event), lines: next.players.map((p) => lines[p.id]), councilReserveReleased, contractsDelivered, hubDelivered, cityDelivered: q(contractsDelivered + hubDelivered), cityNeed, crisisHubNeed, crisisHubShortfall, shortfall, securityBefore: before, securityAfter: next.citySecurity, councilSpent: q(budgetBefore - next.council.budget), waste: q(Object.values(lines).reduce((s, line) => s + line.spoilage + line.decay, 0)) }
+  const previous = next.history[next.history.length - 1]
+  const sharers = next.players.filter((p) => ['share', 'release'].includes(next.decisions[p.id]?.card)).length
+  const loops = {
+    lowSecurityNext: next.round < C.rounds && next.citySecurity > 0 && next.citySecurity < next.rules.cityMaxSecurity * C.loops.lowSecurityFraction,
+    trustBudgetNext: next.round < C.rounds && isCrisis(next) && sharers >= next.players.length * C.loops.crisisShareFraction ? next.players.length * C.loops.trustBudgetPerFarmer : 0,
+    unpreparedFlood: event.kind === 'flood' && previous?.event.kind === 'warning' && previous.round === next.round - 1 && previous.lines.every((line) => line.stored === 0),
+  }
+  next.resolution = { round: next.round, event: clone(event), lines: next.players.map((p) => lines[p.id]), councilReserveReleased, contractsDelivered, hubDelivered, cityDelivered: q(contractsDelivered + hubDelivered), cityNeed, crisisHubNeed, crisisHubShortfall, shortfall, securityBefore: before, securityAfter: next.citySecurity, councilSpent: q(budgetBefore - next.council.budget), waste: q(Object.values(lines).reduce((s, line) => s + line.spoilage + line.decay, 0)), loops }
   if (policy.policy === 'automatic') next.council.explanation = councilReserveReleased > 0 ? `Funded ${councilReserveReleased} units from the Mae Tha community reserve because planned food fell short; ${isCrisis(next) ? 'funded community hub deliveries with the remaining budget' : 'kept the rest for later'}.` : shortfall > 0 ? 'Need remains unmet: the remaining reserve, roads or budget could not cover the gap.' : `Planned food met need; kept the reserve${isCrisis(next) ? ' and funded crisis hub deliveries' : ' for later'}.`
   next.decisionHistory.push({ round: next.round, choices: clone(next.decisions), pests: clone(next.pestResults), council: clone(state.council.plan) })
   next.history.push(clone(next.resolution))
@@ -262,6 +269,14 @@ export function advanceRound(state: GameState): GameState {
   const harvest = nextHarvest(next)
   next.round++; next.pestResults = {}; if(next.policy === 'C') next.reserve=q(next.reserve+C.policies.C.reserveGrowthPerRound); next.phase = 'council'; next.ready = []; next.activePlayerIndex = 0; next.resolution = null
   next.players.forEach((p) => { p.harvest = next.mixedRoles && p.role === 'contract' ? C.companyHarvest*(harvest/C.harvestPerFarm) : harvest; if(p.role === 'contract') p.companyDebt=q(p.companyDebt+C.companyAdvance) })
+  const loops = state.resolution?.loops
+  next.council.budget = q(next.council.budget + (loops?.trustBudgetNext ?? 0))
+  const upcoming = next.events[next.round - 1]
+  // Low security: a closed market has no price to raise.
+  if (loops?.lowSecurityNext && upcoming.price > 0) {
+    const surcharge = C.loops.lowSecurityPriceRise, lost = q(Math.min(upcoming.capacity, surcharge * next.players.length * C.loops.buyersLostPerDollarPerFarmer))
+    next.events[next.round - 1] = { ...upcoming, price: upcoming.price + surcharge, capacity: q(upcoming.capacity - lost), surcharge, buyersLost: lost }
+  }
   next.council.plan = emptyCouncilPlan(next.players[0].id)
   next.council.explanation = ''
   next.plans = Object.fromEntries(next.players.map((p) => [p.id, defaultPlan(next, p)]))
@@ -364,11 +379,13 @@ export function policyMetrics(state: GameState): PolicyMetrics {
   const average = (values: number[]) => values.length ? q(values.reduce((s,v)=>s+v,0)/values.length) : 0
   return { shortageRounds: state.history.filter(r=>r.shortfall>0).length, finalSecurity: state.citySecurity, contractCash: average(companies.map(p=>p.cash)), contractDebt: average(companies.map(p=>p.companyDebt)), maeThaProfit: average(members.map(p=>p.cash-C.startingCash)), waste: state.totalWaste }
 }
+/** The deck without loop effects, so a replay recomputes its own loops. */
+export const baseEvents = (events: EventCard[]): EventCard[] => events.map(({ surcharge = 0, buyersLost = 0, ...card }) => ({ ...card, price: card.price - surcharge, capacity: q(card.capacity + buyersLost) }))
 // Replay actual event deck, roles, crop results and choices; no UI or new randomness.
 // Choices exclusive to policy A become Sell/no-promise under None.
 export function replayUnderNone(state: GameState): GameState {
   let baseline = createGame(state.players.map(p=>p.name),()=>0,{seat:state.council.seat,mixedRoles:state.mixedRoles,policy:'none',roles:state.players.map(p=>p.role),singlePlayer:state.players.length===1})
-  baseline.events=clone(state.events)
+  baseline.events=baseEvents(state.events)
   for (const record of state.decisionHistory) {
     if (baseline.phase==='gameOver' || baseline.phase==='debrief') break
     baseline=advanceCouncil(baseline)
