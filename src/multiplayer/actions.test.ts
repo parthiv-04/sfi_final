@@ -70,7 +70,7 @@ describe('host authority, room flow and learning sequence', () => {
     expect(replay.game!.players.map((p) => p.role)).toEqual(['maeTha', 'contract', 'maeTha'])
   })
   it('requires a separate Council phone only in player mode', () => { const m = newRoom('TEST', 'host', 'automatic', 3); expect(projectRoom(m).publicRoom.seats).toHaveLength(3); expect(projectRoom(newRoom('TEST', 'host', 'player', 3)).publicRoom.seats).toHaveLength(4); expect(run(lobby(3, 'player'), 'host', 'start').receipt.accepted).toBe(true) })
-  it('synchronizes how-to, four context cards, event and grow before the timer starts', () => { let m = run(lobby(), 'host', 'start').model; expect(m.learning.kind).toBe('howto'); expect(m.planningEndsAt).toBeNull(); m = run(m, 'u1', 'learningNext', { ...m.learning }).model; for (let i = 0; i < 4; i++) { expect(m.learning).toEqual({ kind: 'context', index: i }); expect(projectRoom(m).publicRoom.learning).toEqual(m.learning); m = run(m, 'host', 'learningNext', { ...m.learning }).model } expect(m.learning.kind).toBe('event'); m = run(m, 'host', 'learningNext', { ...m.learning }).model; expect(projectRoom(m).publicRoom.step).toBe('Grow'); m = run(m, 'host', 'learningNext', { ...m.learning }).model; expect(m.planningEndsAt).toBe(1000 + C.planningSeconds * C.millisecondsPerSecond); expect(projectRoom(m).publicRoom.step).toBe('Decide') })
+  it('synchronizes how-to, four context cards, event and grow before the timer starts', () => { let m = run(lobby(), 'host', 'start').model; expect(m.learning.kind).toBe('howto'); expect(m.planningEndsAt).toBeNull(); m = run(m, 'host', 'learningNext', { ...m.learning }).model; for (let i = 0; i < 4; i++) { expect(m.learning).toEqual({ kind: 'context', index: i }); expect(projectRoom(m).publicRoom.learning).toEqual(m.learning); m = run(m, 'host', 'learningNext', { ...m.learning }).model } expect(m.learning.kind).toBe('event'); m = run(m, 'host', 'learningNext', { ...m.learning }).model; expect(projectRoom(m).publicRoom.step).toBe('Grow'); m = run(m, 'host', 'learningNext', { ...m.learning }).model; expect(m.planningEndsAt).toBe(1000 + C.planningSeconds * C.millisecondsPerSecond); expect(projectRoom(m).publicRoom.step).toBe('Decide') })
   it('accepts simultaneous card submissions from the same board and decides Council afterward', () => { let m = planning(3, 'player'); const initial = structuredClone(m); const actions = [3, 1, 2].map((i) => packet(initial, `u${i}`, 'plan', { choice: { card: initial.game!.players[i-1].role === 'contract' ? 'sell' : 'share', promise: initial.game!.players[i-1].role !== 'contract' } })); for (const a of actions) { const result = applyAction(m, a.actorUid, a, () => 0, 1001); expect(result.receipt.accepted).toBe(true); m = result.model } expect(m.game!.phase).toBe('council'); expect(m.game!.resolution).toBeNull(); expect(projectRoom(m).privateViews.u4.canCouncil).toBe(true); m = run(m, 'u4', 'council', { plan: m.game!.council.plan }).model; expect(m.game!.resolution).not.toBeNull() })
   it('publishes aggregate submitted households without exposing individual choices', () => { let m = planning(); m = run(m, 'u1', 'plan', { choice: { card: 'share', promise: false } }).model; const projection = projectRoom(m); expect(projection.publicRoom.previewFed).toBe(1); expect(JSON.stringify(projection.publicRoom)).not.toContain('"card":"share"'); expect(projection.privateViews.u1.choice!.card).toBe('share'); expect(projection.privateViews.u2.choice!.card).toBe('sell') })
   it('handles deadline defaults, rejects late submissions and prevents duplicate application', () => { const m = planning(); const a = packet(m, 'u1', 'plan', { choice: sell }); const first = applyAction(m, 'u1', a, () => 0, 1001); expect(applyAction(first.model, 'u1', a).model.revision).toBe(first.model.revision); expect(run(m, 'u2', 'plan', { choice: sell }, m.planningEndsAt!).receipt.accepted).toBe(false); expect(run(m, 'host', 'resolve', {}, m.planningEndsAt!).model.game!.resolution).not.toBeNull() })
@@ -92,4 +92,23 @@ describe('controller transport', () => {
   it('serializes concurrent submissions with atomic expected revisions', async () => { const mock = mockService(), m = planning(); const c = new HostController(mock.service, m, vi.fn(), vi.fn(), () => 0, () => 1001); await Promise.all([1, 2].map((i) => c.dispatch(`u${i}`, packet(m, `u${i}`, 'plan', { choice: sell })))); expect(c.model.savedSeats).toHaveLength(2); expect(mock.publications.map((p) => p.expectedRevision)).toEqual([m.revision, m.revision + 1]) })
   it('does not advance on a failed publication and retries safely', async () => { const mock = mockService(), m = planning(); const c = new HostController(mock.service, m, vi.fn(), vi.fn(), () => 0, () => 1001), a = packet(m, 'u1', 'plan', { choice: sell }); vi.mocked(mock.service.publish).mockRejectedValueOnce(new Error('Offline')); await expect(c.dispatch('u1', a)).rejects.toThrow('Offline'); expect(c.model).toEqual(m); await c.dispatch('u1', a); expect(c.model.savedSeats).toEqual(['p1']) })
   it('keeps phone dependencies free of runtime engine imports', () => { for (const file of ['PlayerView.tsx', 'PhoneControls.tsx', 'SharedBoard.tsx', 'LearningUI.tsx', 'firebase.ts', 'protocol.ts']) { const source = readFileSync(new URL(file, import.meta.url), 'utf8'); expect(source).not.toMatch(/from\s+['"].*\/engine['"]/); expect(source).not.toMatch(/from\s+['"].*hostModel['"]/); } })
+})
+
+describe('shared learning cards', () => {
+  it('waits for every connected player before advancing, while the host can advance for everyone', () => {
+    let m = run(lobby(3), 'host', 'start').model
+    const card = { ...m.learning }
+    const first = run(m, 'u1', 'learningSkip', card)
+    expect(first.receipt.accepted).toBe(true)
+    expect(first.receipt.message).toMatch(/Waiting for 2 more players/)
+    expect(first.model.learning).toEqual(card)
+    expect(projectRoom(first.model, undefined, 1000).publicRoom.learningReady).toEqual(['u1'])
+    m = run(first.model, 'u2', 'learningNext', card).model
+    expect(m.learning).toEqual(card)
+    m = run(m, 'u3', 'learningNext', card).model
+    expect(m.learning).not.toEqual(card)
+    expect(m.learningReady).toEqual({})
+    const before = { ...m.learning }
+    expect(run(m, 'host', 'learningNext', before).model.learning).not.toEqual(before)
+  })
 })
