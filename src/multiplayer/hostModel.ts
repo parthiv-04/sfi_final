@@ -31,15 +31,16 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
     if (action.type === 'settings') {
       if (senderUid !== next.hostUid || next.game) throw new Error('Choose settings before starting.')
       keys(p, ['skipPest','policy']); if(p.policy !== undefined) { if(!['none','A','B','C'].includes(text(p.policy))) throw new Error('Choose a policy.');next.policy=p.policy as RoomModel['policy'] } if (typeof p.skipPest !== 'boolean') throw new Error('Choose skip pest game.'); next.skipPest = p.skipPest
-    } else if (action.type === 'pest' || action.type === 'growFinish') {
+    } else if (action.type === 'pest' || action.type === 'growFinish' || action.type === 'growSkip') {
       if (!next.game || next.paused || next.learning.kind !== 'grow' || next.learning.index !== 1) throw new Error('Grow is closed.')
       if (action.type === 'pest') {
         keys(p, ['destroyed']); const seat = participant?.seatId
         if (!seat || seat === 'council' || next.pestDone.includes(seat)) throw new Error('Crop result already saved or no farm seat.')
         next.game = applyPestLoss(next.game, seat, number(p.destroyed)); next.pestDone.push(seat)
       } else {
-        if (senderUid !== next.hostUid || next.pestEndsAt === null || now < next.pestEndsAt) throw new Error('Grow time has not ended.')
-        for (const farmer of next.game.players) if (!next.pestDone.includes(farmer.id)) { next.game = applyPestLoss(next.game, farmer.id, C.minigame.plants); next.pestDone.push(farmer.id) }
+        if (senderUid !== next.hostUid) throw new Error('Only the host can end Grow for everyone.')
+        if (action.type === 'growFinish' && (next.pestEndsAt === null || now < next.pestEndsAt)) throw new Error('Grow time has not ended.')
+        for (const farmer of next.game.players) if (!next.pestDone.includes(farmer.id)) { next.game = applyPestLoss(next.game, farmer.id, 0); next.pestDone.push(farmer.id) }
       }
       if (next.pestDone.length === next.farmerCount) { next.learning = { kind: null, index: 0 }; next.pestEndsAt = null; next.planningEndsAt = next.offline ? null : now + C.planningSeconds * C.millisecondsPerSecond }
     } else if (action.type === 'question' || action.type === 'replay') {
@@ -49,9 +50,10 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
       else {
         if (typeof p.sameEvents !== 'boolean') throw new Error('Choose same events or new events.')
         const previous = next.game
+        // Players keep the roles they chose for the replay.
         const singlePlayer = previous.players.length === 1
-        next.game = createGame(previous.players.map((farmer) => farmer.name), random, { name: previous.council.name, seat: next.councilMode, policy: next.policy, roles: singlePlayer ? previous.players.map((farmer) => farmer.role) : undefined, singlePlayer })
-        if (p.sameEvents) { next.game = createGame(previous.players.map(p=>p.name),random,{name:previous.council.name,seat:next.councilMode,policy:next.policy,roles:previous.players.map(p=>p.role),singlePlayer});next.game.events=clone(previous.events) }
+        next.game = createGame(previous.players.map((farmer) => farmer.name), random, { name: previous.council.name, seat: next.councilMode, policy: next.policy, roles: previous.players.map((farmer) => farmer.role), singlePlayer })
+        if (p.sameEvents) next.game.events = clone(previous.events)
         next.game = advanceCouncil(next.game); next.learning = { kind: 'howto', index: 0 }; next.savedSeats = []; next.pestDone = []; next.pestEndsAt = null; next.planningEndsAt = null; next.runId++; next.usedFacts=[];next.roundFact=null;next.factRound=0; next.discussionIndex = -1; next.reflections = {}; next.paused = false; next.ended = false
       }
     } else if (action.type === 'reflection') {
@@ -98,6 +100,13 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
       if (![...farmSeats(next.farmerCount), ...(next.councilMode === 'player' ? ['council'] : [])].includes(seat)) throw new Error('Unknown seat.')
       if (Object.values(next.participants).some((entry) => entry.uid !== senderUid && entry.seatId === seat)) throw new Error('That seat is already taken.')
       participant.seatId = seat; participant.spectator = false
+      if (seat === 'council') participant.role = null
+    } else if (action.type === 'chooseRole') {
+      keys(p, ['role']); if (!participant) throw new Error('Join first.')
+      if (next.game) throw new Error('Roles are fixed once the game starts.')
+      if (!participant.seatId || participant.seatId === 'council') throw new Error('Pick a farm seat before choosing a role.')
+      if (!['contract', 'maeTha'].includes(text(p.role))) throw new Error('Choose company contract or Mae Tha organic.')
+      participant.role = p.role as FarmerRole
     } else if (action.type === 'start') {
       keys(p, ['farmerCount', 'roles']); if (senderUid !== next.hostUid) throw new Error('Only the host can start.')
       if (next.game) throw new Error('Already started.')
@@ -105,15 +114,19 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
       const count = p.farmerCount === undefined ? next.farmerCount : number(p.farmerCount)
       const singlePlayer = next.offline && count === 1
       scaledRules(count, singlePlayer)
-      let roles: FarmerRole[] | undefined
+      let soloRoles: FarmerRole[] | undefined
       if (p.roles !== undefined) {
         if (!singlePlayer || !Array.isArray(p.roles) || p.roles.length !== count || p.roles.some((role) => role !== 'contract' && role !== 'maeTha')) throw new Error('Choose a farmer role for single-player mode.')
-        roles = p.roles as FarmerRole[]
+        soloRoles = p.roles as FarmerRole[]
       }
       if (count > next.farmerCount || joined.length < count) throw new Error(`Wait for ${count} farmers, or start with the number already joined.`)
       const council = Object.values(next.participants).find((entry) => entry.seatId === 'council')
       if (next.councilMode === 'player' && !council) throw new Error('Ask one phone to take the Council seat.')
       const occupants = joined.slice(0, count)
+      // Single player sends its role with Start; group games use the roles chosen in the lobby.
+      if (!soloRoles && occupants.some((entry) => !entry.role)) throw new Error('Every farmer must choose a role before starting.')
+      const roles = soloRoles ?? occupants.map((entry) => entry.role!)
+      if (!singlePlayer && (!roles.includes('contract') || !roles.includes('maeTha'))) throw new Error('Start needs at least one company contract farmer and one Mae Tha organic farmer.')
       for (const entry of joined) { const index = occupants.indexOf(entry); entry.seatId = index >= 0 ? farmSeats(count)[index] : null; entry.spectator = index < 0 }
       next.farmerCount = count
       next.game = createGame(occupants.map((entry) => entry!.name), random, { name: council?.name ?? 'Automatic Council', seat: next.councilMode, policy: next.policy, roles, singlePlayer })
@@ -160,7 +173,7 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
 export function projectRoom(model: RoomModel, receipt?: Publication['receipt'], now = Date.now()): Publication {
   const game = model.game
   const event = game ? currentEvent(game) : null
-  const publicRoom: PublicRoom = { policy: model.policy, comparison: game && !game.endedEarly && ['debrief','gameOver'].includes(game.phase) ? comparePolicy(game) : null, roundFact: model.roundFact, offline: model.offline, skipPest: model.skipPest, pestSeed: (model.pestSeed + (game?.round ?? 0)) >>> 0, pestEndsAt: model.pestEndsAt, pestDone: model.pestDone, discussionIndex: model.discussionIndex, wordWall: model.discussionIndex === DEBRIEF_QUESTIONS.length ? Object.values(model.reflections) : [], endedEarly: game?.endedEarly ?? false, farmers: game?.players.map((p) => ({ id: p.id, name: p.name, cash: p.cash, goal: p.goal, submitted: model.savedSeats.includes(p.id), connected: Object.values(model.participants).some((person) => person.seatId === p.id && now - person.lastSeen <= NETWORK_CONFIG.hostTimeoutMs) })) ?? [], history: game?.history.map((r) => ({ ...clone(r), event: { kind: r.event.kind, label: r.event.label, price: r.event.price, capacity: r.event.capacity } })) ?? [], learning: model.learning, runId: model.runId, step: model.learning.kind === 'grow' ? 'Grow' : model.learning.kind ? 'Event' : game?.phase === 'planning' ? 'Decide' : game?.phase === 'council' ? 'Council' : 'Reveal', previewFed: game?.resolution ? game.resolution.cityDelivered : game ? model.savedSeats.reduce((sum, id) => sum + previewDecision(game, id, game.decisions[id]).households, 0) : 0, rules: game?.rules ?? scaledRules(model.farmerCount), code: model.code, revision: model.revision, started: !!game, seats: [...farmSeats(model.farmerCount), ...(model.councilMode === 'player' ? ['council' as const] : [])].map((seat) => { const entry = Object.values(model.participants).find((p) => p.seatId === seat); return { id: seat, name: entry?.name ?? (seat === 'council' ? 'Food Council' : `Farm ${seat.slice(1)}`), taken: !!entry, connected: !!entry && now - entry.lastSeen <= NETWORK_CONFIG.hostTimeoutMs } }), round: game?.round ?? 0, phase: game?.phase ?? 'lobby', event: event ? { kind: event.kind, label: event.label, price: event.price, capacity: event.capacity } : null, security: game?.citySecurity ?? scaledRules(model.farmerCount).cityStartingSecurity, warehouseUnits: game ? warehouseUnits(game) : 0, reserve: game?.reserve ?? scaledRules(model.farmerCount).warehouseStartingUnits, councilBudget: game?.council.budget ?? scaledRules(model.farmerCount).councilStartingBudget, totalHubUnits: game?.totalHubUnits ?? 0, totalContractsDelivered: game?.totalContractsDelivered ?? 0, crisisWarehouseUnits: game?.crisisWarehouseUnits ?? 0, waste: game?.totalWaste ?? 0, planningEndsAt: model.planningEndsAt, savedSeats: model.savedSeats, paused: model.paused, councilMode: model.councilMode, councilExplanation: game?.council.explanation ?? '', result: game?.resolution ? { ...clone(game.resolution), event: { kind: game.resolution.event.kind, label: game.resolution.event.label, price: game.resolution.event.price, capacity: game.resolution.event.capacity } } : null, scores: game ? rankPlayers(game) : [] }
+  const publicRoom: PublicRoom = { policy: model.policy, comparison: game && !game.endedEarly && ['debrief','gameOver'].includes(game.phase) ? comparePolicy(game) : null, roundFact: model.roundFact, offline: model.offline, skipPest: model.skipPest, pestSeed: (model.pestSeed + (game?.round ?? 0)) >>> 0, pestEndsAt: model.pestEndsAt, pestDone: model.pestDone, discussionIndex: model.discussionIndex, wordWall: model.discussionIndex === DEBRIEF_QUESTIONS.length ? Object.values(model.reflections) : [], endedEarly: game?.endedEarly ?? false, farmers: game?.players.map((p) => ({ id: p.id, name: p.name, cash: p.cash, goal: p.goal, submitted: model.savedSeats.includes(p.id), connected: Object.values(model.participants).some((person) => person.seatId === p.id && now - person.lastSeen <= NETWORK_CONFIG.hostTimeoutMs) })) ?? [], history: game?.history.map((r) => ({ ...clone(r), event: { kind: r.event.kind, label: r.event.label, price: r.event.price, capacity: r.event.capacity } })) ?? [], learning: model.learning, runId: model.runId, step: model.learning.kind === 'grow' ? 'Grow' : model.learning.kind ? 'Event' : game?.phase === 'planning' ? 'Decide' : game?.phase === 'council' ? 'Council' : 'Reveal', previewFed: game?.resolution ? game.resolution.cityDelivered : game ? model.savedSeats.reduce((sum, id) => sum + previewDecision(game, id, game.decisions[id]).households, 0) : 0, rules: game?.rules ?? scaledRules(model.farmerCount), code: model.code, revision: model.revision, started: !!game, seats: [...farmSeats(model.farmerCount), ...(model.councilMode === 'player' ? ['council' as const] : [])].map((seat) => { const entry = Object.values(model.participants).find((p) => p.seatId === seat); return { id: seat, name: entry?.name ?? (seat === 'council' ? 'Food Council' : `Farm ${seat.slice(1)}`), taken: !!entry, connected: !!entry && now - entry.lastSeen <= NETWORK_CONFIG.hostTimeoutMs, role: entry?.role ?? null } }), round: game?.round ?? 0, phase: game?.phase ?? 'lobby', event: event ? { kind: event.kind, label: event.label, price: event.price, capacity: event.capacity } : null, security: game?.citySecurity ?? scaledRules(model.farmerCount).cityStartingSecurity, warehouseUnits: game ? warehouseUnits(game) : 0, reserve: game?.reserve ?? scaledRules(model.farmerCount).warehouseStartingUnits, councilBudget: game?.council.budget ?? scaledRules(model.farmerCount).councilStartingBudget, totalHubUnits: game?.totalHubUnits ?? 0, totalContractsDelivered: game?.totalContractsDelivered ?? 0, crisisWarehouseUnits: game?.crisisWarehouseUnits ?? 0, waste: game?.totalWaste ?? 0, planningEndsAt: model.planningEndsAt, savedSeats: model.savedSeats, paused: model.paused, councilMode: model.councilMode, councilExplanation: game?.council.explanation ?? '', result: game?.resolution ? { ...clone(game.resolution), event: { kind: game.resolution.event.kind, label: game.resolution.event.label, price: game.resolution.event.price, capacity: game.resolution.event.capacity } } : null, scores: game ? rankPlayers(game) : [] }
   const privateViews: Record<string, PrivateView> = {}
   for (const participant of Object.values(model.participants)) {
     const farmer = game?.players.find((p) => p.id === participant.seatId)

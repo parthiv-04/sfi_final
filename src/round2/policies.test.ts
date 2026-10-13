@@ -5,17 +5,17 @@ import { makeRng } from './rng'
 import type { PolicyScenario } from './types'
 const names=['Company','Mae Tha 1','Mae Tha 2']
 const setup=(policy:PolicyScenario)=>createGame(names,makeRng(11),{seat:'automatic',policy,roles:['contract','maeTha','maeTha']})
-it('A opens limited school promises and repeated kitchen shares for company farmers',()=>{
- const s=advanceCouncil(setup('A')),p=s.players[0];p.communityGiftUsed=true
- expect(canPromise(s,p)).toBe(true);expect(allowedCards(s,p)).toContain('share')
- expect(updateDecision(s,p.id,{card:'share',promise:true}).plans[p.id].contractQuantity).toBe(C.policies.A.maxCompanySchoolPromise)
- const n=advanceCouncil(setup('none'));n.players[0].communityGiftUsed=true
- expect(canPromise(n,n.players[0])).toBe(false);expect(allowedCards(n,n.players[0])).not.toContain('share')
+it('company farmers can only sell to the company under every policy',()=>{
+ for(const policy of ['none','A','B','C'] as const){
+  const s=advanceCouncil(setup(policy)),p=s.players[0]
+  expect(allowedCards(s,p)).toEqual(['sell']);expect(canPromise(s,p)).toBe(false)
+  expect(()=>updateDecision(s,p.id,{card:'share',promise:false})).toThrow()
+ }
 })
 it('A sends company produce through crisis channels instead of counting it as rotten',()=>{
  const resolve=(policy:PolicyScenario)=>{const s=setup(policy);s.events[0]={kind:'marketClosure',...C.events.marketClosure};return finishDecisions(advanceCouncil(s))}
  const a=resolve('A'),none=resolve('none');expect(a.resolution!.lines[0].companyRotten).toBe(0)
- expect(none.resolution!.lines[0].companyRotten).toBe(C.companyAdvance)
+ expect(none.resolution!.lines[0].companyRotten).toBe(C.companyHarvest)
  expect(a.resolution!.lines[0].hubUnits).toBeGreaterThan(0)
  expect(a.totalWaste).toBeLessThan(none.totalWaste)
 })
@@ -44,9 +44,9 @@ it('replays None with identical roles, recorded choices and crop losses without 
  expect(comparison.actual).toEqual(policyMetrics(s));expect(comparison.baseline).toEqual(comparison.actual)
  expect(comparison.fewerShortageRounds).toBe(0);expect(s).toEqual(original)
 })
-it('compares policy-only choices by legal fallback and keeps the cohort unchanged',()=>{
+it('compares a Policy A game against None and keeps the cohort unchanged',()=>{
  let s=advanceCouncil(setup('A'))
- for(const p of s.players)s=updateDecision(s,p.id,{card:'share',promise:true})
+ for(const p of s.players)s=updateDecision(s,p.id,{card:p.role==='contract'?'sell':'share',promise:canPromise(s,p)})
  s=finishDecisions(s);const original=structuredClone(s)
  expect(()=>comparePolicy(s)).not.toThrow();expect(s).toEqual(original)
 })
