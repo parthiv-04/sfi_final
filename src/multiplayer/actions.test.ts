@@ -71,7 +71,34 @@ describe('host authority, room flow and learning sequence', () => {
     expect(replay.game!.players.map((p) => p.role)).toEqual(['maeTha', 'contract', 'maeTha'])
   })
   it('requires a separate Council phone only in player mode', () => { const m = newRoom('TEST', 'host', 'automatic', 3); expect(projectRoom(m).publicRoom.seats).toHaveLength(3); expect(projectRoom(newRoom('TEST', 'host', 'player', 3)).publicRoom.seats).toHaveLength(4); expect(run(lobby(3, 'player'), 'host', 'start').receipt.accepted).toBe(true) })
-  it('synchronizes how-to, four context cards, event and grow before the timer starts', () => { let m = run(lobby(), 'host', 'start').model; expect(m.learning.kind).toBe('howto'); expect(m.planningEndsAt).toBeNull(); m = run(m, 'host', 'learningNext', { ...m.learning }).model; for (let i = 0; i < 4; i++) { expect(m.learning).toEqual({ kind: 'context', index: i }); expect(projectRoom(m).publicRoom.learning).toEqual(m.learning); m = run(m, 'host', 'learningNext', { ...m.learning }).model } expect(m.learning.kind).toBe('event'); m = run(m, 'host', 'learningNext', { ...m.learning }).model; expect(projectRoom(m).publicRoom.step).toBe('Grow'); m = run(m, 'host', 'learningNext', { ...m.learning }).model; expect(m.planningEndsAt).toBe(1000 + C.planningSeconds * C.millisecondsPerSecond); expect(projectRoom(m).publicRoom.step).toBe('Decide') })
+  it('starts the guided scenario and accepts a contract contribution through the host action schema', () => {
+    let m = run(lobby(3), 'host', 'start', { guided: true }).model
+    expect(m.game!.events.slice(0, 5).map((e) => e.kind)).toEqual(['normal', 'festival', 'warning', 'flood', 'marketClosure'])
+    while (m.learning.kind) m = run(m, 'host', 'learningNext', { ...m.learning }).model
+    const uid = Object.values(m.participants).find((p) => p.role === 'contract')!.uid
+    expect(run(m, uid, 'plan', { choice: { card: 'sell', promise: false, supportCouncil: 'yes' } }).receipt.accepted).toBe(false)
+    const accepted = run(m, uid, 'plan', { choice: { card: 'sell', promise: false, supportCouncil: true } })
+    expect(accepted.receipt.accepted).toBe(true)
+    expect(projectRoom(accepted.model).privateViews[uid].choice!.supportCouncil).toBe(true)
+  })
+  it('shows only how-to and the current event before planning when Grow is disabled', () => {
+    let m = run(lobby(), 'host', 'start').model
+    expect(m.learning.kind).toBe('howto'); expect(m.planningEndsAt).toBeNull()
+    m = run(m, 'host', 'learningNext', { ...m.learning }).model
+    expect(m.learning.kind).toBe('event'); expect(m.planningEndsAt).toBeNull()
+    m = run(m, 'host', 'learningNext', { ...m.learning }).model
+    expect(m.learning.kind).toBeNull()
+    expect(m.planningEndsAt).toBe(1000 + C.planningSeconds * C.millisecondsPerSecond)
+    expect(projectRoom(m).publicRoom.step).toBe('Decide')
+  })
+  it('opens Grow directly after the event, without another introduction card', () => {
+    let m = run({ ...lobby(), skipPest: false }, 'host', 'start').model
+    m = run(m, 'host', 'learningNext', { ...m.learning }).model
+    m = run(m, 'host', 'learningNext', { ...m.learning }).model
+    expect(m.learning).toEqual({ kind: 'grow', index: 1 })
+    expect(m.planningEndsAt).toBeNull()
+    expect(m.pestEndsAt).toBe(1000 + C.minigame.durationSec * C.millisecondsPerSecond)
+  })
   it('accepts simultaneous card submissions from the same board and decides Council afterward', () => { let m = planning(3, 'player'); const initial = structuredClone(m); const actions = [3, 1, 2].map((i) => packet(initial, `u${i}`, 'plan', { choice: { card: initial.game!.players[i-1].role === 'contract' ? 'sell' : 'share', promise: initial.game!.players[i-1].role !== 'contract' } })); for (const a of actions) { const result = applyAction(m, a.actorUid, a, () => 0, 1001); expect(result.receipt.accepted).toBe(true); m = result.model } expect(m.game!.phase).toBe('council'); expect(m.game!.resolution).toBeNull(); expect(projectRoom(m).privateViews.u4.canCouncil).toBe(true); m = run(m, 'u4', 'council', { plan: m.game!.council.plan }).model; expect(m.game!.resolution).not.toBeNull() })
   it('publishes aggregate submitted households without exposing individual choices', () => { let m = planning(); m = run(m, 'u1', 'plan', { choice: { card: 'share', promise: false } }).model; const projection = projectRoom(m); expect(projection.publicRoom.previewFed).toBe(C.harvestPerFarm * C.soilRecoveryFraction); expect(JSON.stringify(projection.publicRoom)).not.toContain('"card":"share"'); expect(projection.privateViews.u1.choice!.card).toBe('share'); expect(projection.privateViews.u2.choice!.card).toBe('sell') })
   it('handles deadline defaults, rejects late submissions and prevents duplicate application', () => { const m = planning(); const a = packet(m, 'u1', 'plan', { choice: sell }); const first = applyAction(m, 'u1', a, () => 0, 1001); expect(applyAction(first.model, 'u1', a).model.revision).toBe(first.model.revision); expect(run(m, 'u2', 'plan', { choice: sell }, m.planningEndsAt!).receipt.accepted).toBe(false); expect(run(m, 'host', 'resolve', {}, m.planningEndsAt!).model.game!.resolution).not.toBeNull() })

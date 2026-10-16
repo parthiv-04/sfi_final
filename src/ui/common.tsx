@@ -38,7 +38,7 @@ export function CountUp({ from, to, seconds = 1, delay = 0 }: { from: number; to
   return <>{value}</>;
 }
 
-/** A fixed-size logical stage scaled to the container width, so pixel art stays crisp and proportional. */
+/** Scale layout with zoom so SVGs render at display resolution instead of stretching a composited layer. */
 export function Stage({ w = 320, h = 200, children, label }: { w?: number; h?: number; children: ReactNode; label?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [k, setK] = useState(1);
@@ -53,7 +53,7 @@ export function Stage({ w = 320, h = 200, children, label }: { w?: number; h?: n
   }, [w]);
   return (
     <div ref={ref} className="stage-fit" style={{ height: h * k + 8 }} role="img" aria-label={label}>
-      <div className="stage" style={{ width: w, height: h, transform: `scale(${k})` }}>
+      <div className="stage" style={{ width: w, height: h, zoom: k }}>
         {children}
       </div>
     </div>

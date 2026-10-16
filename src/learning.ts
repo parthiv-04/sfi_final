@@ -39,16 +39,10 @@ export function pickRoundFact(result: import('./round2/types').Resolution, used:
 export const ALL_CARDS = [...CONTEXT_CARDS, ...Object.values(EVENT_CARDS), ...CHANNEL_CARDS, ...FACTS]
 export const ROUND_STEPS = ['Event', 'Grow', 'Decide', 'Council', 'Reveal'] as const
 export const DEBRIEF_QUESTIONS = [
-  ['Your choices', 'When did you choose cash over feeding the city, and why?'],
-  ['Preparing', 'What would you have done differently if you had trusted the flood forecast?'],
-  ['Distribution', 'The farms grew enough food. Why did households still go hungry, or what kept them fed?'],
-  ['Mae Tha', 'How did the Mae Tha community reserve and farm storage change what happened in a crisis?'],
-  ['The Food Council', "What should the Council have done earlier, and what can a real food council do that farmers can’t?"],
-  ['Real life', 'Where did this game feel realistic, and what did it leave out?'],
-  ['Farmer roles', 'How did company debt and organic costs change the choices each farmer could make?'],
-  ['Affordability', 'When was food too expensive for people even though it was there? Who paid for a fair farmer price?'],
-  ['Policy', 'Which policy reduced shortages most, and who paid for it?'],
-  ['Our model', 'Which arrow in our causal loop diagram would you redraw after playing?'],
+  ['Your choices', 'Which choice earned you more money, and which helped households eat? What changed when you chose differently?'],
+  ['Preparing', 'How did stored food, usable roads and Council funding affect deliveries during a disruption?'],
+  ['Real life', 'What does this suggest about food access in Chiang Mai, and what does the game leave out?'],
+  ['Your takeaway', 'In one sentence, explain what keeps households fed when food exists but markets or roads fail.'],
 ] as const
 // "Why?" behind each option card: the real-world reason, 2–3 sentences.
 export const OPTION_WHY = {

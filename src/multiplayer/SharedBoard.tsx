@@ -1,6 +1,6 @@
+import { decisionFeedback } from '../feedback'
 import { PolicyComparison } from '../ui/PolicyComparison'
 import { LoopsPage } from '../ui/Loops'
-import { CardPanel } from './LearningUI'
 import { ORGANIC_STORY } from '../learning'
 import { TimeScale } from '../ui/common'
 import { EventScene, RouteScene, CityScene, SecurityScene, FlowScene, ShopperScene } from '../ui/scenes'
@@ -34,9 +34,9 @@ function FinalResults({ room }: { room: PublicRoom }) {
   const crises = room.history.filter((r) => ['flood', 'marketClosure'].includes(r.event.kind))
   const reserve = crises.reduce((s, r) => s + r.councilReserveReleased + r.lines.reduce((t, l) => t + l.reserveReleased, 0), 0)
   const hub = crises.reduce((s, r) => s + r.hubDelivered, 0)
-  return <section className="workspace debrief"><h2>{room.phase === 'gameOver' ? 'City went hungry' : 'City fed!'}</h2><p>{room.endedEarly ? 'The host ended play early. No wins are awarded.' : room.phase === 'gameOver' ? 'Nobody wins, whatever their cash.' : 'Farmers who reached their cash goal win. Rankings use cash.'}</p><figure className="round-chart"><figcaption>Households fed per round</figcaption>{room.history.map((r) => <Bar key={r.round} label={`Round ${r.round}`} value={r.cityDelivered} max={r.cityNeed} good={r.shortfall === 0} channel="hub" />)}</figure><div className="final-farmers">{room.farmers.map((farmer) => { const score = room.scores.find((s) => s.playerId === farmer.id); return <article key={farmer.id}><h3>{score?.won ? '✓' : '✗'} {farmer.name}{score ? ` · rank ${score.rank}` : ''}</h3><Bar label={`$${farmer.cash} / $${farmer.goal} goal`} value={farmer.cash} max={farmer.goal} good={!!score?.won} channel="market" /></article> })}</div><h3>What happened</h3><p>{closest ? `The city came closest to going hungry in round ${closest.round}, when only ${accessPercent(closest.securityAfter, room.rules.cityMaxSecurity)}% of people had access to food.` : 'The game ended before the first reveal.'} Food wasted: {units(room.waste)}.</p><p>In crisis rounds, the Mae Tha community reserve contributed {units(reserve)} and the community food hub delivered {units(hub)} in total, including reserve food.</p><p className="limitation">This is a simplified distribution chain; real cities have many more routes. Prices, harvests, costs and policy effects are simplified for gameplay.</p></section>
+  return <section className="workspace debrief"><h2>{room.phase === 'gameOver' ? 'City went hungry' : 'City fed!'}</h2><p>{room.endedEarly ? 'The host ended play early. No wins are awarded.' : room.phase === 'gameOver' ? 'Nobody wins, whatever their cash.' : 'Farmers who reached their cash goal win. Rankings use cash.'}</p><figure className="round-chart"><figcaption>Households fed per round</figcaption>{room.history.map((r) => <Bar key={r.round} label={`Round ${r.round}`} value={r.cityDelivered} max={r.cityNeed} good={r.shortfall === 0} channel="hub" />)}</figure><div className="final-farmers">{room.farmers.map((farmer) => { const score = room.scores.find((s) => s.playerId === farmer.id); return <article key={farmer.id}><h3>{score?.won ? '✓' : '✗'} {farmer.name}{score ? ` · rank ${score.rank}` : ''}</h3><Bar label={`$${farmer.cash} / $${farmer.goal} goal`} value={farmer.cash} max={farmer.goal} good={!!score?.won} channel="market" /></article> })}</div><h3>What happened</h3><p>{closest ? `The city came closest to going hungry in round ${closest.round}, when only ${accessPercent(closest.securityAfter, room.rules.cityMaxSecurity)}% of people had access to food.` : 'The game ended before the first reveal.'} Food wasted: {units(room.waste)}.</p><p>In crisis rounds, the Mae Tha community reserve contributed {units(reserve)} and the community food hub delivered {units(hub)} in total, including reserve food.</p><section className="learning-takeaway"><h3>One key takeaway</h3><p>Growing enough food is only the start: affordable routes, preparation and delivery funding determine who gets to eat.</p><p>This run: kitchens received {room.history.reduce((sum, r) => sum + r.hubDelivered, 0)} crates; school and hospital deliveries supplied {room.history.reduce((sum, r) => sum + r.contractsDelivered, 0)} crates.</p></section><p className="limitation">This is a simplified distribution chain; real cities have many more routes. Prices, harvests, costs and policy effects are simplified for gameplay.</p></section>
 }
-export function SharedBoard({ room, compact = false, revealStep = C.revealSteps }: { room: PublicRoom; compact?: boolean; revealStep?: number }) {
+export function SharedBoard({ room, compact = false, revealStep = C.revealSteps, summaryOnly = false }: { room: PublicRoom; compact?: boolean; revealStep?: number; summaryOnly?: boolean }) {
   const result = room.result, stage = C.revealStage
   const securityShown = !result || revealStep >= stage.security
   const householdsShown = !result || revealStep >= stage.households
@@ -45,7 +45,7 @@ export function SharedBoard({ room, compact = false, revealStep = C.revealSteps 
   const need = result?.cityNeed ?? (['flood', 'marketClosure'].includes(room.event?.kind ?? '') ? room.rules.cityCrisisNeed : room.rules.cityNeed)
   return <section className={`shared-board ${compact ? 'compact-board' : ''}`}>
     {!result && <div className="projector-board"><aside className="board-event workspace"><p className="eyebrow">Round {room.round}/{C.rounds} · {room.step} · Policy {room.policy === 'none' ? 'None' : room.policy}</p><h2>{room.event?.label ?? 'Choose seats'}</h2><p className="channel-market">🏪 {money(room.event?.price ?? 0)}/unit · market takes {units(room.event?.capacity ?? 0)}</p>{!!room.event?.surcharge && <p className="loop-caption">↺ Price +${room.event.surcharge}: few people had access to food.</p>}{room.walkOffs > 0 && <p className="channel-market">At this price {room.walkOffs} shopper{room.walkOffs === 1 ? ' walks' : 's walk'} off.</p>}{room.event?.kind === 'warning' && <p className="forecast-card">Forecast: flood next round · {C.eventForecastAccuracy * C.quantityPrecision}% chance</p>}{room.event?.kind === 'flood' && <p className="shock-box">Transport is halved now. Next round’s harvest is halved.</p>}<PlanningTimer endsAt={room.planningEndsAt} />{room.paused && <p className="error">Paused by host</p>}</aside><section className="board-goals workspace"><h2>Keep the city fed</h2><Bar label="Households fed this round" value={fed} max={need} good={fed >= need} channel="hub" /><p>Vulnerable households: low-income families, older people living alone, and migrant and day-wage workers who cannot afford market prices. Also schools and hospitals.</p><Bar label="People with access to food" percent value={accessPercent(security, room.rules.cityMaxSecurity)} max={100} danger={security <= room.rules.cityMaxSecurity * C.lowSecurityFraction} good={security === room.rules.cityMaxSecurity} channel="hub" /><h3>Shared resources</h3><Bar label="Mae Tha community reserve" value={room.reserve} max={room.rules.warehouseStartingUnits + (room.policy === 'C' ? room.rules.playerCount*C.policies.C.startingReserveBonusPerFarmer + (C.rounds-1)*C.policies.C.reserveGrowthPerRound : 0)} channel="warehouse" /><Bar label="Council budget" value={room.councilBudget} max={room.rules.councilStartingBudget} channel="contract" />{room.councilExplanation && <details className="council-explanation"><summary>Council coordination</summary><p>{room.councilExplanation}</p></details>}</section>{!compact && <aside className="board-players workspace"><h2>Farmers</h2>{room.farmers.map((farmer) => { const cash = farmer.cash; return <article key={farmer.id}><strong>{farmer.submitted ? '✓ ' : ''}{farmer.name}</strong>{!room.offline && <small>{farmer.connected ? 'Connected' : 'Disconnected'}</small>}<Bar label={`$${Number(cash.toFixed(2))} / $${farmer.goal} goal`} value={cash} max={farmer.goal} good={cash >= farmer.goal} channel="market" /></article> })}</aside>}</div>}
-    {result && <section key={revealStep} className="workspace reveal-scene">
+    {result && !summaryOnly && <section key={revealStep} className="workspace reveal-scene" aria-live="polite">
       {revealStep === stage.event && <><h2>{result.event.label}</h2><EventScene kind={result.event.kind} /><small className="pixel-label">Market: {result.event.price}/unit · {result.event.capacity} capacity</small></>}
       {revealStep === stage.market && <><h2>Market and company</h2>{!!result.event.surcharge && <p className="loop-caption">↺ Few people had access to food: price +${result.event.surcharge}.</p>}<MarketFlow room={room} result={result} />{result.event.price > 0 && result.event.capacity > 0 && <ShopperScene bought={sum(result, (l) => l.marketUnits)} walkOffs={result.shoppers?.walkOffs ?? 0} organicWalkOffs={result.shoppers?.organicWalkOffs ?? 0} price={result.event.price} />}<small className="pixel-label">{result.lines.map(l=>`${room.farmers.find(p=>p.id===l.playerId)?.name}: ${l.companyUnits ? `company ${num(l.companyUnits)}` : `sold ${num(l.marketUnits)}`}`).join(' · ')}</small></>}
       {revealStep === stage.contract && <><h2>Schools & hospital</h2><RouteScene amount={result.contractsDelivered} /><small className="pixel-label">Delivered {result.contractsDelivered} · disrupted {result.lines.reduce((s,l)=>s+l.contractShortfall,0)}</small></>}
@@ -84,15 +84,45 @@ const CARD_NAMES = { sell: 'Sell', share: 'Share', store: 'Store', release: 'Rel
 export function YourChoice({ room, view, label = 'Your choice' }: { room: PublicRoom; view: PrivateView; label?: string }) {
   const line = room.result?.lines.find((l) => l.playerId === view.player?.id)
   if (!line || !view.choice || !view.player) return null
-  const earned = num(line.revenue - line.storageCost - line.certificateCost), households = num(line.contractUnits + line.hubUnits)
-  const chose = view.player.role === 'contract' ? 'Sell to company' : `${CARD_NAMES[view.choice.card]}${view.choice.promise ? ' + promise' : ''}`
-  return <p className="your-choice" role="status"><strong>{label}:</strong> {chose} · earned {signed(earned)} · fed {households} household{households === 1 ? '' : 's'}</p>
+  const earned = num(line.revenue - line.storageCost - line.certificateCost - (line.councilContribution ?? 0)), households = num(line.contractUnits + line.hubUnits)
+  const chose = view.player.role === 'contract' ? `Sell to company${view.choice.supportCouncil ? ' + fund deliveries' : ''}` : `${CARD_NAMES[view.choice.card]}${view.choice.promise ? ' + promise' : ''}`
+  return <section className="your-choice" role="status"><p><strong>{label}:</strong> {chose} · earned {signed(earned)} · fed {households} household{households === 1 ? '' : 's'}</p>{decisionFeedback(room.result!, line, view.choice).map((reason) => <p key={reason}>{reason}</p>)}</section>
 }
-export function RoundReveal({ room, onComplete }: { room: PublicRoom; onComplete?: () => void }) {
-  // Each reveal step waits for the host: Next moves on, Replay restarts the current animation.
-  const [step, setStep] = useState(0), [replay, setReplay] = useState(0), complete = useRef(onComplete)
+export function RoundReveal({ room, onComplete, onSkip, disabled = false }: { room: PublicRoom; onComplete?: () => void; onSkip: () => void | boolean | Promise<void | boolean>; disabled?: boolean }) {
+  const [step, setStep] = useState(0), [replay, setReplay] = useState(0)
+  const [skipped, setSkipped] = useState(false), [skipping, setSkipping] = useState(false), [skipError, setSkipError] = useState('')
+  const [manualPause, setManualPause] = useState(() => typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false))
+  const complete = useRef(onComplete)
   complete.current = onComplete
-  useEffect(() => { if (step >= C.revealSteps) complete.current?.() }, [step])
-  const done = step >= C.revealSteps, last = step === C.revealSteps - 1
-  return <TimeScale.Provider value={done ? 0 : 1}><div style={{ ['--t' as string]: done ? 0 : 1, ['--loop' as string]: done ? 'paused' : 'running' }}><div className="reveal-heading"><h2>Round {room.round}: reveal together</h2><div className="phone-actions">{done ? <button className="quiet" onClick={() => { setStep(0); setReplay(replay + 1) }}>Replay round</button> : <><button className="quiet" onClick={() => setReplay(replay + 1)}>Replay</button><button className="primary" onClick={() => setStep(step + 1)}>{last ? 'Finish reveal' : 'Next'}</button><button className="quiet" onClick={() => setStep(C.revealSteps)}>Skip</button></>}</div></div><div className="reveal-track">{['Event', 'Market', 'Contracts', 'Storage', 'Food hub', 'Households fed', 'Access to food'].map((label, i) => <span key={label} className={i === Math.min(step, C.revealStage.security) ? 'shown' : ''}>{label}</span>)}</div><SharedBoard key={replay} room={room} revealStep={step} />{done && room.roundFact && <section className="workspace fact"><CardPanel card={room.roundFact} /></section>}</div></TimeScale.Provider>
+  const done = step >= C.revealSteps
+  const blocked = room.paused || disabled || skipping
+  const paused = blocked || manualPause
+  useEffect(() => {
+    if (done || skipped || paused) return
+    const timer = window.setTimeout(() => setStep((current) => current + 1), C.revealCardMs)
+    return () => window.clearTimeout(timer)
+  }, [step, replay, done, skipped, paused])
+  useEffect(() => { if (done && !skipped) complete.current?.() }, [done, skipped])
+  const skip = async () => {
+    setSkipping(true); setSkipError('')
+    try { if (await onSkip() !== false) setSkipped(true) }
+    catch (error) { setSkipError(error instanceof Error ? error.message : 'Could not advance. Try again.') }
+    finally { setSkipping(false) }
+  }
+  if (skipped) return ['debrief', 'gameOver'].includes(room.phase) ? <SharedBoard room={room} summaryOnly /> : null
+  return <TimeScale.Provider value={done ? 0 : 1}>
+    <div style={{ ['--t' as string]: done ? 0 : 1, ['--loop' as string]: done || paused ? 'paused' : 'running' }}>
+      <div className="reveal-heading"><h2>Round {room.round}: reveal together</h2><div className="phone-actions">
+        {done ? <button className="quiet" disabled={blocked} onClick={() => { setStep(0); setReplay((current) => current + 1) }}>Replay round</button> : <>
+          <button className="quiet" disabled={blocked} aria-pressed={manualPause} onClick={() => setManualPause((current) => !current)}>{manualPause ? 'Resume reveal' : 'Pause reveal'}</button><button className="quiet" disabled={blocked} onClick={() => setReplay((current) => current + 1)}>Replay</button>
+          <button className="primary" disabled={blocked} onClick={() => setStep((current) => current + 1)}>Next</button>
+          <button className="quiet" disabled={blocked} onClick={() => void skip()}>Skip</button>
+        </>}
+      </div></div>
+      {!done && <p className="reveal-timing">{paused ? 'Reveal paused' : 'Advances every 5 seconds · Next skips this card'}</p>}
+      {skipError && <p className="error" role="alert">{skipError}</p>}
+      <div className="reveal-track">{['Event', 'Market', 'Contracts', 'Storage', 'Food hub', 'Households fed', 'Access to food'].map((label, i) => <span key={label} className={i === Math.min(step, C.revealStage.security) ? 'shown' : ''}>{label}</span>)}</div>
+      <SharedBoard key={`${step}-${replay}`} room={room} revealStep={step} />
+    </div>
+  </TimeScale.Provider>
 }

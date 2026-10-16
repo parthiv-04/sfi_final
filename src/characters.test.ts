@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COMPOSITE_NOTE, destiny, PROFILES, type DestinyInput } from './characters'
+import { COMPOSITE_NOTE, destiny, profileFor, PROFILES, type DestinyInput } from './characters'
 import { advanceCouncil, createGame, finishDecisions } from './round2/engine'
 import { makeRng } from './round2/rng'
 
@@ -31,6 +31,18 @@ describe('character profiles', () => {
 })
 
 describe('destinies', () => {
+  it('uses the entered farmer name in the persona and ending, keeping the assigned background', () => {
+    const original = profileFor('contract', 0)
+    const named = profileFor('contract', 0, '  Alex  ')
+    expect(named).toEqual({ ...original, name: 'Alex' })
+    expect(PROFILES.contract[0].name).toBe('Somchai')
+    for (const role of ['contract', 'maeTha'] as const) {
+      const text = destiny(base({ role, name: 'Alex' }))
+      expect(text).toContain('Alex')
+      expect(text).not.toContain(profileFor(role, 0).name)
+    }
+  })
+
   it('chooses a contract ending from the city result, debt history and cash', () => {
     expect(destiny(base({ cityLostRound: 3, debt: 5 }))).toMatch(/went hungry in round 3/)
     expect(destiny(base({ debt: 5, rounds: [r(1, 'normal', 0), r(2, 'flood', 5)] }))).toMatch(/debt grew after the flood in round 2/)

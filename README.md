@@ -2,6 +2,10 @@
 
 A pixel game for UTC2720 Project 2 about moving emergency food to Chiang Mai households during floods and market closures. Single-player mode has one farmer who chooses a role; pass-and-play and multiplayer support three to eight farmers and an Automatic or human Food Council over five rounds. Both farmer roles share one city meter; the host facilitates and holds no farming or Council seat.
 
+Learning goal: balance farm income with keeping vulnerable households fed during floods and market closures. The primary audience is university students with little food-system knowledge; the secondary audience is adults in community workshops. Learn through choices, outcomes and a brief practice task; Why and Quick reference provide optional detail.
+
+Guided first game starts with a normal market, then festival prices, a warning, a flood and a market closure. Uncheck it for shuffled events. Recorded round choices and four debrief prompts support a facilitated review without quizzes or scores for learning. Human playtesting with the target audiences is still needed; the automated tests verify game behaviour, not learning effectiveness.
+
 ## Run and check
 
 ```sh
@@ -46,10 +50,10 @@ The application uses query parameters (`?join=ABCD`) rather than path routing; n
 
 1. Choose Single player to select one farmer role, or Pass-and-play to select 3–8 farmers. Both modes let you choose policy None/A/B/C and optionally **Skip pest game**; pass-and-play also lets you choose an Automatic or human Council.
 2. For multiplayer, create a room and join its QR/code from phones; a human Council uses its own phone. Each farmer picks a farm seat and a role (company contract or Mae Tha organic) in the lobby; pass-and-play picks a role per farmer on the setup screen. Group games need at least one farmer of each role, and roles stay fixed for all five rounds (replays keep them).
-3. Read shared context/event cards, then Grow: a 10-second seeded pest game, concurrent on phones and sequential offline. It is for flavour only and never changes the harvest. Company farmers spray; Mae Tha members hand-pick. Each farmer can Skip their own game, the host (or the single screen) can **Skip for everyone**, and missing phones time out.
-4. Choose one available route card and, where permitted, a school/hospital promise for next round. Company farmers see a single card, **Sell to company**. Phones have a 60-second planning timer; offline play has handoffs and no planning deadline.
-5. After farmer submissions, the Council chooses one action or acts automatically. Follow the seven pixel reveal steps, use Skip for a short session, and read one sourced fact per round.
-6. Review cash-goal winners and the policy comparison; discuss ten questions and add anonymous reflections to the word wall.
+3. Try a short Sell/Share practice task, then read the current event and enter Grow: a 10-second seeded pest game, concurrent on phones and sequential offline. It is for flavour only and never changes the harvest. Company farmers spray; Mae Tha members hand-pick. Each farmer can Skip their own game, the host (or the single screen) can **Skip for everyone**, and missing phones time out.
+4. Choose one available route card and, where permitted, a school/hospital promise for next round. Company farmers keep one produce route, **Sell to company**, and can choose to contribute $4 of personal cash to Council delivery funding. Company contributions are a simplified game choice, not a claim about existing arrangements in Chiang Mai. Phones have a 60-second planning timer; offline play has handoffs and no planning deadline.
+5. After farmer submissions, the Council chooses one action or acts automatically. The seven pixel reveal steps advance automatically every 5 seconds. Next skips the current step; Pause reveal stops progression and animations; Skip jumps to the next round (or final results). Farmer personas use the entered names. Repeated channel introductions and per-round fact cards are omitted; Quick reference and Why explanations stay available.
+6. Review cash-goal winners and the policy comparison; discuss four focused questions and add anonymous reflections to the word wall.
 
 For local phone access, run `npm run dev -- --host 0.0.0.0` and use the laptop’s LAN URL rather than localhost. Multiplayer requires internet access and Firebase configuration.
 

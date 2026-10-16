@@ -23,16 +23,19 @@ export const PROFILES: Record<FarmerRole, Profile[]> = {
   ],
 }
 export const COMPOSITE_NOTE = 'Fictional composite based on our fieldwork facts.'
-export const profileFor = (role: FarmerRole, index: number | undefined) => PROFILES[role][(index ?? 0) % PROFILES[role].length]
+export function profileFor(role: FarmerRole, index: number | undefined, name?: string): Profile {
+  const profile = PROFILES[role][(index ?? 0) % PROFILES[role].length]
+  return name?.trim() ? { ...profile, name: name.trim() } : profile
+}
 
 export interface DestinyInput {
-  role: FarmerRole; profile?: number; cash: number; goal: number; debt: number; certificatePaid: number; soilLost: number
+  role: FarmerRole; profile?: number; name?: string; cash: number; goal: number; debt: number; certificatePaid: number; soilLost: number
   cityLostRound: number | null // round the city went hungry, or null if it survived
   rounds: { round: number; kind: string; debtAfter?: number; fed: number }[]
 }
 /** One-paragraph ending picked from 5–6 templates per role, using final cash, debt and the city result. */
 export function destiny(d: DestinyInput): string {
-  const name = profileFor(d.role, d.profile).name
+  const name = profileFor(d.role, d.profile, d.name).name
   const fed = d.rounds.reduce((s, r) => s + r.fed, 0)
   if (d.role === 'contract') {
     // Each round's advance is normally repaid that round; a debt that carries over is the trap.

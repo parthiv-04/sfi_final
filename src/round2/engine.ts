@@ -162,7 +162,7 @@ export function resolveCurrentRound(state: GameState): GameState {
   const prePositionHold = policy.policy === 'prePosition' ? Math.min(policy.quantity, next.players.reduce((sum, p) => sum + next.plans[p.id].storeUnits, 0)) * C.prePositionPrice : 0
   const left = Object.fromEntries(next.players.map((p) => [p.id, capacity]))
   const food = Object.fromEntries(next.players.map((p) => [p.id, p.harvest]))
-  const lines = Object.fromEntries(next.players.map((p): [string, ResolutionLine] => [p.id, { playerId: p.id, harvest: p.harvest, contractUnits: 0, contractShortfall: 0, companyUnits: 0, companySold: 0, companyRotten: 0, certificateCost: next.mixedRoles && p.role === 'maeTha' ? certificateCost(next) : 0, marketUnits: 0, hubUnits: 0, warehouseReleased: 0, reserveReleased: 0, stored: 0, spoilage: 0, decay: 0, storageCost: 0, revenue: 0, transportUsed: 0, transportCapacity: capacity }]))
+  const lines = Object.fromEntries(next.players.map((p): [string, ResolutionLine] => [p.id, { playerId: p.id, harvest: p.harvest, contractUnits: 0, contractShortfall: 0, companyUnits: 0, companySold: 0, companyRotten: 0, certificateCost: next.mixedRoles && p.role === 'maeTha' ? certificateCost(next) : 0, marketUnits: 0, hubUnits: 0, warehouseReleased: 0, reserveReleased: 0, stored: 0, spoilage: 0, decay: 0, storageCost: 0, councilContribution: next.decisions[p.id]?.supportCouncil ? C.councilContribution : 0, revenue: 0, transportUsed: 0, transportCapacity: capacity }]))
   const spend = (amount: number) => { const paid = q(Math.min(amount, next.council.budget)); next.council.budget = q(next.council.budget - paid); next.council.spent = q(next.council.spent + paid); return paid }
   const move = (id: string, amount: number) => { left[id] = q(left[id] - amount) }
   if (policy.policy === 'extraTrucks') spend(C.extraTruckCost)
@@ -248,7 +248,7 @@ export function resolveCurrentRound(state: GameState): GameState {
   next.warehouse = next.warehouse.filter((lot) => lot.units > 0)
   for (const p of next.players) {
     const line = lines[p.id]; line.spoilage = q(line.spoilage + food[p.id]); line.transportUsed = q(capacity - left[p.id]); line.storageCost = q(line.storageCost); line.revenue = q(line.revenue)
-    p.cash = q(p.cash + line.revenue - line.storageCost - line.certificateCost); p.certificatePaid += line.certificateCost; if (p.role === 'contract') line.debtAfter = p.companyDebt; p.waste = q(p.waste + line.spoilage + line.decay); next.totalWaste = q(next.totalWaste + line.spoilage + line.decay)
+    p.cash = q(p.cash + line.revenue - line.storageCost - line.certificateCost - (line.councilContribution ?? 0)); p.certificatePaid += line.certificateCost; if (p.role === 'contract') line.debtAfter = p.companyDebt; p.waste = q(p.waste + line.spoilage + line.decay); next.totalWaste = q(next.totalWaste + line.spoilage + line.decay)
     if (isCrisis(next)) next.crisisWarehouseUnits = q(next.crisisWarehouseUnits + line.warehouseReleased + line.reserveReleased)
   }
   if (isCrisis(next)) next.crisisWarehouseUnits = q(next.crisisWarehouseUnits + councilReserveReleased)
@@ -321,6 +321,8 @@ export function allocateDecision(state: GameState, playerId: string, choice: Dec
   const p = state.players.find((farmer) => farmer.id === playerId)
   if (!p) throw new Error('Choose your farm seat before submitting.')
   if (!['sell', 'share', 'store', 'release'].includes(choice.card) || typeof choice.promise !== 'boolean') throw new Error('Tap one plan card and choose whether to promise a contract.')
+  if (choice.supportCouncil !== undefined && typeof choice.supportCouncil !== 'boolean') throw new Error('Choose whether to fund Council deliveries.')
+  if (choice.supportCouncil && (p.role !== 'contract' || p.cash < C.councilContribution)) throw new Error('Only a contract farmer with enough cash can contribute to delivery funding.')
   if (!allowedCards(state,p).includes(choice.card)) throw new Error('Choose a card available for your role.')
   if (!canPromise(state,p) && choice.promise) throw new Error('Only Mae Tha members promise school contracts.')
   if (choice.card === 'release' && warehouseUnits(state, playerId) === 0) throw new Error('You have no stored food. Choose Sell, Share or Store.')
@@ -347,7 +349,7 @@ export function previewDecision(state: GameState, playerId: string, choice: Deci
   const contract = contractArrivals(state, p)
   const attemptedContract = Math.min(p.harvest, contractsDue(state, p), transportCapacity(state))
   const stockLeft = Math.max(0, warehouseUnits(state, p.id) - plan.warehouseRelease) + plan.storeUnits
-  const costs = stockLeft * C.warehouseCostPerUnit + (state.mixedRoles && p.role === 'maeTha' ? certificateCost(state) : 0)
+  const costs = (choice.supportCouncil ? C.councilContribution : 0) + stockLeft * C.warehouseCostPerUnit + (state.mixedRoles && p.role === 'maeTha' ? certificateCost(state) : 0)
   const paidHub = Math.min(plan.hubUnits + plan.warehouseRelease, affordable(state.council.budget, hubPrice(state)))
   const moves = q(attemptedContract + plan.marketUnits + plan.hubUnits + plan.storeUnits + plan.warehouseRelease)
   const companySale = p.role === 'contract' ? plan.marketUnits * C.companyPrice : 0
@@ -375,6 +377,7 @@ export function finishDecisions(state: GameState): GameState {
   if (next.phase !== 'planning') return next
   for (const p of next.players) next.plans[p.id] = allocateDecision(next, p.id, next.decisions[p.id])
   next.ready = next.players.map((p) => p.id)
+  next.council.budget = q(next.council.budget + next.players.reduce((sum, p) => sum + (next.decisions[p.id]?.supportCouncil ? C.councilContribution : 0), 0))
   if (next.council.seat === 'player') { next.phase = 'council'; return next }
   return resolveCurrentRound(next)
 }
@@ -408,7 +411,7 @@ export function replayUnderNone(state: GameState): GameState {
     for(const [id,destroyed] of Object.entries(record.pests)) baseline=applyPestLoss(baseline,id,destroyed)
     for(const p of baseline.players) {
       const saved=record.choices[p.id] ?? {card:'sell',promise:false}
-      const choice: Decision={card:allowedCards(baseline,p).includes(saved.card)?saved.card:'sell',promise:saved.promise&&canPromise(baseline,p)}
+      const choice: Decision={card:allowedCards(baseline,p).includes(saved.card)?saved.card:'sell',promise:saved.promise&&canPromise(baseline,p), ...(saved.supportCouncil && p.role === 'contract' && p.cash >= C.councilContribution ? { supportCouncil: true } : {})}
       baseline=updateDecision(baseline,p.id,choice)
     }
     baseline=finishDecisions(baseline)
