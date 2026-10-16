@@ -46,7 +46,7 @@ function SpriteImpl({ name, scale = 4, shirt = '#4aa3df', accent = '#4aa3df', fl
       aria-hidden={label ? undefined : true}
     >
       {rects.map((r, i) => (
-        <rect key={i} x={r.x} y={r.y} width={r.w} height={1.02} fill={r.fill} />
+        <rect key={i} x={r.x} y={r.y} width={r.w} height={1} fill={r.fill} />
       ))}
     </svg>
   );

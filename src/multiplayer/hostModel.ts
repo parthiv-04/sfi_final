@@ -1,4 +1,5 @@
 // Host only. Engine calls never enter the phone dependency path.
+import { guidedEvents } from '../round2/guided'
 import { pickRoundFact, CONTEXT_CARDS, DEBRIEF_QUESTIONS } from '../learning'
 import { ROUND2_CONFIG as C, scaledRules } from '../round2/config'
 import { baseEvents, comparePolicy, allowedCards, optionOutcome, promiseOutcome, hubPrice, organicBuyersLeft, walkOffs, organicWalkOffs, applyPestLoss, advanceCouncil, advanceRound, availableHarvest, contractsDue, createGame, currentEvent, finishPlanning, finishDecisions, previewDecision, updateDecision, rankPlayers, transportCapacity, updateCouncilPlan, updatePlan, validatePlan, warehouseUnits } from '../round2/engine'
@@ -11,7 +12,12 @@ const object = (value: unknown): Record<string, unknown> => { if (!value || type
 const keys = (value: Record<string, unknown>, allowed: string[]) => { if (Object.keys(value).some((key) => !allowed.includes(key))) throw new Error('Unexpected action field.') }
 const number = (value: unknown) => { if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('A finite number is required.'); return value }
 const text = (value: unknown) => { if (typeof value !== 'string') throw new Error('Text is required.'); return value }
-function parseChoice(value: unknown): Decision { const p = object(value); keys(p, ['card', 'promise']); if (!['sell', 'share', 'store', 'release'].includes(text(p.card)) || typeof p.promise !== 'boolean') throw new Error('Tap a plan card and choose the contract toggle.'); return { card: p.card as PlanCard, promise: p.promise } }
+function parseChoice(value: unknown): Decision {
+  const p = object(value); keys(p, ['card', 'promise', 'supportCouncil'])
+  if (!['sell', 'share', 'store', 'release'].includes(text(p.card)) || typeof p.promise !== 'boolean') throw new Error('Tap a plan card and choose the contract toggle.')
+  if (p.supportCouncil !== undefined && typeof p.supportCouncil !== 'boolean') throw new Error('Choose whether to fund Council deliveries.')
+  return { card: p.card as PlanCard, promise: p.promise, ...(p.supportCouncil !== undefined ? { supportCouncil: p.supportCouncil } : {}) }
+}
 function parseCouncil(value: unknown): CouncilPlan { const p = object(value); keys(p, ['policy', 'quantity', 'farmerId', 'reserveRelease']); return { policy: text(p.policy) as CouncilPlan['policy'], quantity: number(p.quantity), farmerId: text(p.farmerId), reserveRelease: number(p.reserveRelease) } }
 export function newRoom(code: string, hostUid: string, councilMode: RoomModel['councilMode'], farmerCount: number = C.playerCount, singlePlayer = false): RoomModel { return { policy: 'none', usedFacts: [], roundFact: null, factRound: 0, skipPest: false, pestSeed: Array.from(code).reduce((s,c)=>Math.imul(s,31)+c.charCodeAt(0),0) >>> 0, pestEndsAt: null, pestDone: [], discussionIndex: -1, reflections: {}, offline: false, learning: { kind: null, index: 0 }, learningReady: {}, runId: 0, version: NETWORK_CONFIG.roomVersion, farmerCount: scaledRules(farmerCount, singlePlayer).playerCount, code, hostUid, councilMode, revision: 0, participants: {}, game: null, handled: {}, seatRevisions: {}, planningEndsAt: null, savedSeats: [], paused: false, remainingMs: 0, ended: false } }
 export function applyAction(model: RoomModel, senderUid: string, action: ClientAction, random = Math.random, now = 0): { model: RoomModel; receipt: ActionReceipt } {
@@ -90,10 +96,13 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
         else type = seated.every((person) => votes[person.uid] === 'skip') ? 'learningSkip' : 'learningNext'
       }
       if (advance) {
-        if (next.learning.kind === 'howto') next.learning = { kind: 'context', index: 0 }
+        if (next.learning.kind === 'howto') next.learning = { kind: 'event', index: 0 }
         else if (next.learning.kind === 'context' && type !== 'learningSkip' && next.learning.index < CONTEXT_CARDS.length - 1) next.learning.index++
         else if (next.learning.kind === 'context') next.learning = { kind: 'event', index: 0 }
-        else if (next.learning.kind === 'event') next.learning = { kind: 'grow', index: 0 }
+        else if (next.learning.kind === 'event') {
+          if (next.skipPest) { next.learning = { kind: null, index: 0 }; next.planningEndsAt = next.offline ? null : now + C.planningSeconds * C.millisecondsPerSecond }
+          else { next.learning = { kind: 'grow', index: 1 }; next.pestDone = []; next.pestEndsAt = next.offline ? null : now + C.minigame.durationSec * C.millisecondsPerSecond }
+        }
         else if (next.learning.kind === 'grow' && next.learning.index === 0) {
           if (next.skipPest) { next.learning = { kind: null, index: 0 }; next.planningEndsAt = next.offline ? null : now + C.planningSeconds * C.millisecondsPerSecond }
           else { next.learning.index = 1; next.pestDone = []; next.pestEndsAt = next.offline ? null : now + C.minigame.durationSec * C.millisecondsPerSecond }
@@ -121,7 +130,7 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
       if (!['contract', 'maeTha'].includes(text(p.role))) throw new Error('Choose Company-contract or Mae Tha organic.')
       participant.role = p.role as FarmerRole
     } else if (action.type === 'start') {
-      keys(p, ['farmerCount', 'roles']); if (senderUid !== next.hostUid) throw new Error('Only the host can start.')
+      keys(p, ['farmerCount', 'roles', 'guided']); if (p.guided !== undefined && typeof p.guided !== 'boolean') throw new Error('Choose guided or shuffled events.'); if (senderUid !== next.hostUid) throw new Error('Only the host can start.')
       if (next.game) throw new Error('Already started.')
       const joined = farmSeats(next.farmerCount).map((seat) => Object.values(next.participants).find((entry) => entry.seatId === seat)).filter((entry) => !!entry)
       const count = p.farmerCount === undefined ? next.farmerCount : number(p.farmerCount)
@@ -143,6 +152,7 @@ export function applyAction(model: RoomModel, senderUid: string, action: ClientA
       for (const entry of joined) { const index = occupants.indexOf(entry); entry.seatId = index >= 0 ? farmSeats(count)[index] : null; entry.spectator = index < 0 }
       next.farmerCount = count
       next.game = createGame(occupants.map((entry) => entry!.name), random, { name: council?.name ?? 'Automatic Council', seat: next.councilMode, policy: next.policy, roles, singlePlayer })
+      if (p.guided) next.game.events = guidedEvents(count)
       next.game = advanceCouncil(next.game); next.learning = { kind: 'howto', index: 0 }; next.planningEndsAt = null
     } else {
       if (!next.game) throw new Error('The game has not started.')
